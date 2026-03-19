@@ -9,9 +9,19 @@ type CommandOptions = {
   json: boolean;
 };
 
-type CommandHandler = (args: string[], options: CommandOptions) => Promise<{
+type CommandResult = {
   ok: boolean;
-}>;
+  data?: unknown;
+  error?: { code: string; message: string; retryable: boolean };
+};
+
+type CommandHandler = (args: string[], options: CommandOptions) => Promise<CommandResult>;
+
+function hasError(result: CommandResult): result is CommandResult & {
+  error: { code: string; message: string; retryable: boolean };
+} {
+  return !result.ok && Boolean(result.error);
+}
 
 export const router: Record<string, CommandHandler> = {
   init: async () => init(),
@@ -31,7 +41,14 @@ export async function routeCommand(args: string[]) {
 
   if (handler) {
     const result = await handler(commandArgs, options);
-    console.log(JSON.stringify(result, null, 2));
+    if (hasError(result) && !options.json && result.error.code === 'INVALID_TASK_COMMAND') {
+      console.error(result.error.message);
+    } else if (result.ok) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      console.error(JSON.stringify(result, null, 2));
+    }
+
     if (!result.ok) {
       process.exitCode = 1;
     }
