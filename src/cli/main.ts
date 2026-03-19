@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { routeCommand, router } from './router';
 
+const { version } = require('../../package.json') as { version: string };
+
 function printHelp() {
   console.log(`Superplan CLI
 
@@ -17,6 +19,7 @@ Commands:
   task        Task operations
 
 Options:
+  -v, --version  Show CLI version
   --json      Output JSON for agents`);
 }
 
@@ -24,6 +27,12 @@ async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
   const json = args.includes('--json');
+  const showVersion = args.includes('-v') || args.includes('--version');
+
+  if (showVersion) {
+    console.log(version);
+    return;
+  }
 
   if (command === undefined || command === '--json') {
     if (json) {
