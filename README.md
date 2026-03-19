@@ -23,19 +23,48 @@ That split makes it easier to reason about what work exists, what is happening n
 
 ## Quick Start
 
-### 1. Install dependencies
+### Install with curl
+
+If you want a one-command installer, use:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | sh
+```
+
+The installer:
+
+- clones the Superplan CLI repo
+- installs dependencies when needed
+- builds the CLI
+- installs `superplan` globally with npm
+
+Prerequisites:
+
+- `node`
+- `npm`
+- `git`
+
+You can also install to a custom npm prefix:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/main/scripts/install.sh | SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
+```
+
+### Install from source
+
+#### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Build the CLI
+#### 2. Build the CLI
 
 ```bash
 npm run build
 ```
 
-### 3. Set up Superplan
+#### 3. Set up Superplan
 
 Global setup:
 
@@ -49,7 +78,7 @@ Quiet machine-level setup for automation:
 node dist/cli/main.js setup --quiet --json
 ```
 
-### 4. Initialize a repo
+#### 4. Initialize a repo
 
 ```bash
 node dist/cli/main.js init --quiet --json
