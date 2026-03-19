@@ -355,7 +355,11 @@ const popupHeight = 190;
 const popupX = visibleFrame.origin.x + visibleFrame.size.width - popupWidth - 20;
 const popupY = visibleFrame.origin.y + visibleFrame.size.height - popupHeight - 20;
 
-const styleMask = $.NSWindowStyleMaskTitled | $.NSWindowStyleMaskClosable | $.NSWindowStyleMaskMiniaturizable;
+const styleMask =
+  $.NSWindowStyleMaskTitled |
+  $.NSWindowStyleMaskClosable |
+  $.NSWindowStyleMaskMiniaturizable |
+  $.NSWindowStyleMaskResizable;
 const window = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
   $.NSMakeRect(popupX, popupY, popupWidth, popupHeight),
   styleMask,
@@ -364,12 +368,13 @@ const window = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
 );
 
 window.setTitle('Superplan');
-window.setLevel($.NSFloatingWindowLevel);
 window.setHidesOnDeactivate(false);
 window.setCollectionBehavior($.NSWindowCollectionBehaviorCanJoinAllSpaces);
 window.setReleasedWhenClosed(false);
 window.standardWindowButton($.NSWindowCloseButton).setHidden(false);
+window.standardWindowButton($.NSWindowCloseButton).setEnabled(true);
 window.standardWindowButton($.NSWindowMiniaturizeButton).setHidden(false);
+window.standardWindowButton($.NSWindowMiniaturizeButton).setEnabled(true);
 window.standardWindowButton($.NSWindowZoomButton).setHidden(true);
 
 const contentView = window.contentView;

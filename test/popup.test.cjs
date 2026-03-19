@@ -232,12 +232,16 @@ test('popup helper script keeps close and minimize window controls visible', asy
   assert.doesNotMatch(script, /NSPanel\.alloc\.initWithContentRectStyleMaskBackingDefer/);
   assert.match(script, /while \(window\.isVisible\)/);
   assert.match(script, /NSWindowStyleMaskMiniaturizable/);
+  assert.match(script, /NSWindowStyleMaskResizable/);
   assert.match(script, /standardWindowButton\(\$\.NSWindowCloseButton\)\.setHidden\(false\);/);
   assert.match(script, /standardWindowButton\(\$\.NSWindowMiniaturizeButton\)\.setHidden\(false\);/);
+  assert.match(script, /standardWindowButton\(\$\.NSWindowCloseButton\)\.setEnabled\(true\);/);
+  assert.match(script, /standardWindowButton\(\$\.NSWindowMiniaturizeButton\)\.setEnabled\(true\);/);
   assert.match(script, /window\.makeKeyAndOrderFront\(null\);/);
   assert.match(script, /activateIgnoringOtherApps\(true\);/);
   assert.match(script, /standardWindowButton\(\$\.NSWindowZoomButton\)\.setHidden\(true\);/);
   assert.doesNotMatch(script, /setFloatingPanel\(true\);/);
+  assert.doesNotMatch(script, /setLevel\(\$\.NSFloatingWindowLevel\);/);
   assert.doesNotMatch(script, /while \(window\.isVisible\(\)\)/);
   assert.doesNotMatch(script, /standardWindowButton\(\$\.NSWindowMiniaturizeButton\)\.setHidden\(true\);/);
 });
