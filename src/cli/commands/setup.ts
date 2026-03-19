@@ -213,7 +213,7 @@ async function ensureSkillsSource(sourceDir: string): Promise<SetupResult | null
         ok: false,
         error: {
           code: 'SKILLS_SOURCE_MISSING',
-          message: 'Local skills folder not found in project root',
+          message: 'Bundled skills folder not found in CLI package',
           retryable: false,
         },
       };
@@ -223,7 +223,7 @@ async function ensureSkillsSource(sourceDir: string): Promise<SetupResult | null
       ok: false,
       error: {
         code: 'SKILLS_SOURCE_MISSING',
-        message: 'Local skills folder not found in project root',
+        message: 'Bundled skills folder not found in CLI package',
         retryable: false,
       },
     };
@@ -305,7 +305,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
     const cwd = process.cwd();
     const homeDir = os.homedir();
-    const sourceSkillsDir = path.join(cwd, 'skills');
+    const sourceSkillsDir = path.resolve(__dirname, '../../skills');
 
     const globalConfigDir = path.join(homeDir, '.config', 'superplan');
     const globalConfigPath = path.join(globalConfigDir, 'config.toml');

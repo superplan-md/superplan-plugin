@@ -19,6 +19,8 @@ interface ParseDiagnostic {
 interface ParsedTask {
   task_id: string;
   status: string;
+  depends_on_all: string[];
+  depends_on_any: string[];
   description: string;
   acceptance_criteria: AcceptanceCriterion[];
   total_acceptance_criteria: number;
@@ -26,6 +28,7 @@ interface ParsedTask {
   progress_percent: number;
   effective_status: 'draft' | 'in_progress' | 'done';
   is_valid: boolean;
+  is_ready: boolean;
   issues: string[];
 }
 
@@ -33,12 +36,43 @@ type ParseResult =
   | { ok: true; data: { tasks: ParsedTask[]; diagnostics: ParseDiagnostic[] } }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
-function parseFrontmatter(lines: string[]): { task_id: string; status: string; contentStartIndex: number } {
+function parseStringArray(value: string): string[] {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return [];
+  }
+
+  const normalizedValue = trimmedValue.startsWith('[') && trimmedValue.endsWith(']')
+    ? trimmedValue.slice(1, -1)
+    : trimmedValue;
+
+  return normalizedValue
+    .split(',')
+    .map(item => item.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean);
+}
+
+function parseFrontmatter(lines: string[]): {
+  task_id: string;
+  status: string;
+  depends_on_all: string[];
+  depends_on_any: string[];
+  contentStartIndex: number;
+} {
   let taskId = '';
   let status = '';
+  let dependsOnAll: string[] = [];
+  let dependsOnAny: string[] = [];
 
   if (lines[0] !== '---') {
-    return { task_id: taskId, status, contentStartIndex: 0 };
+    return {
+      task_id: taskId,
+      status,
+      depends_on_all: dependsOnAll,
+      depends_on_any: dependsOnAny,
+      contentStartIndex: 0,
+    };
   }
 
   let index = 1;
@@ -54,6 +88,10 @@ function parseFrontmatter(lines: string[]): { task_id: string; status: string; c
         taskId = value;
       } else if (key === 'status') {
         status = value;
+      } else if (key === 'depends_on_all') {
+        dependsOnAll = parseStringArray(value);
+      } else if (key === 'depends_on_any') {
+        dependsOnAny = parseStringArray(value);
       }
     }
 
@@ -63,6 +101,8 @@ function parseFrontmatter(lines: string[]): { task_id: string; status: string; c
   return {
     task_id: taskId,
     status,
+    depends_on_all: dependsOnAll,
+    depends_on_any: dependsOnAny,
     contentStartIndex: index < lines.length ? index + 1 : lines.length,
   };
 }
@@ -203,6 +243,8 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
   const task: ParsedTask = {
     task_id: frontmatter.task_id,
     status: frontmatter.status,
+    depends_on_all: frontmatter.depends_on_all,
+    depends_on_any: frontmatter.depends_on_any,
     description,
     acceptance_criteria: acceptanceCriteria,
     total_acceptance_criteria: totalAcceptanceCriteria,
@@ -210,6 +252,7 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
     progress_percent: progressPercent,
     effective_status: computeEffectiveStatus(acceptanceCriteria),
     is_valid: true,
+    is_ready: false,
     issues: [],
   };
 
@@ -221,6 +264,28 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
     task,
     diagnostics,
   };
+}
+
+function computeTaskReadiness(tasks: ParsedTask[]): void {
+  const doneTaskIds = new Set(
+    tasks
+      .filter(task => task.status === 'done')
+      .map(task => task.task_id),
+  );
+
+  for (const task of tasks) {
+    const allDependenciesSatisfied = task.depends_on_all.every(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId));
+    const anyDependenciesSatisfied = task.depends_on_any.length === 0
+      ? true
+      : task.depends_on_any.some(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId));
+
+    task.is_ready =
+      task.is_valid &&
+      task.status !== 'done' &&
+      task.status !== 'in_progress' &&
+      allDependenciesSatisfied &&
+      anyDependenciesSatisfied;
+  }
 }
 
 async function resolveTaskFiles(targetPath: string): Promise<string[]> {
@@ -342,6 +407,8 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
         task.is_valid = false;
       }
     }
+
+    computeTaskReadiness(tasks);
 
     return {
       ok: true,

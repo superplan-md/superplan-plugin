@@ -6,7 +6,7 @@
     "superplan": "./dist/cli/main.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ./scripts/copy-skills.js",
     "start": "node ./dist/cli/main.js"
   },
   "dependencies": {

@@ -10,6 +10,8 @@ interface AcceptanceCriterion {
 interface ParsedTask {
   task_id: string;
   status: string;
+  depends_on_all: string[];
+  depends_on_any: string[];
   description: string;
   acceptance_criteria: AcceptanceCriterion[];
   total_acceptance_criteria: number;
@@ -17,6 +19,7 @@ interface ParsedTask {
   progress_percent: number;
   effective_status: 'draft' | 'in_progress' | 'done';
   is_valid: boolean;
+  is_ready: boolean;
   issues: string[];
 }
 
@@ -165,6 +168,31 @@ function applyRuntimeState(task: ParsedTask, runtimeState?: RuntimeTaskState): P
   };
 }
 
+function computeMergedTaskReadiness(tasks: ParsedTask[]): ParsedTask[] {
+  const doneTaskIds = new Set(
+    tasks
+      .filter(task => task.status === 'done')
+      .map(task => task.task_id),
+  );
+
+  return tasks.map(task => {
+    const allDependenciesSatisfied = task.depends_on_all.every(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId));
+    const anyDependenciesSatisfied = task.depends_on_any.length === 0
+      ? true
+      : task.depends_on_any.some(dependsOnTaskId => doneTaskIds.has(dependsOnTaskId));
+
+    return {
+      ...task,
+      is_ready:
+        task.is_valid &&
+        task.status !== 'done' &&
+        task.status !== 'in_progress' &&
+        allDependenciesSatisfied &&
+        anyDependenciesSatisfied,
+    };
+  });
+}
+
 async function showTasks(): Promise<TaskCommandResult> {
   const mergedTasksResult = await getMergedTasks();
   if (mergedTasksResult.error) {
@@ -192,7 +220,8 @@ async function getMergedTasks(): Promise<{ tasks?: ParsedTask[]; error?: TaskCom
     return { error: invariantError };
   }
 
-  const tasks = parsedTasksResult.tasks!.map(taskItem => applyRuntimeState(taskItem, runtimeState.tasks[taskItem.task_id]));
+  const tasksWithRuntimeState = parsedTasksResult.tasks!.map(taskItem => applyRuntimeState(taskItem, runtimeState.tasks[taskItem.task_id]));
+  const tasks = computeMergedTaskReadiness(tasksWithRuntimeState);
 
   return { tasks };
 }
@@ -226,7 +255,7 @@ async function nextTask(): Promise<TaskCommandResult> {
   }
 
   const nextReadyTask = mergedTasksResult.tasks!
-    .filter(taskItem => taskItem.status !== 'done' && taskItem.is_valid)
+    .filter(taskItem => taskItem.is_ready)
     .sort((left, right) => left.task_id.localeCompare(right.task_id))[0];
 
   return {
@@ -280,9 +309,25 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
     return parsedTask.error;
   }
 
-  const matchedTask = parsedTask.task!;
+  const mergedTasksResult = await getMergedTasks();
+  if (mergedTasksResult.error) {
+    return mergedTasksResult.error;
+  }
+
+  const matchedTask = mergedTasksResult.tasks!.find(taskItem => taskItem.task_id === taskId) ?? parsedTask.task!;
   if (!matchedTask.is_valid) {
     return getTaskInvalidError();
+  }
+
+  if (!matchedTask.is_ready && runtimeState.tasks[taskId]?.status !== 'in_progress') {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_READY',
+        message: 'Task is not ready',
+        retryable: false,
+      },
+    };
   }
 
   const existingTaskState = runtimeState.tasks[taskId];
