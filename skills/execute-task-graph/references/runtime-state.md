@@ -2,6 +2,11 @@
 
 Runtime truth is not graph truth and not task-contract truth.
 
+Current CLI-backed runtime storage:
+
+- `.superplan/runtime/tasks.json`
+- `.superplan/runtime/events.ndjson`
+
 ## Graph Truth
 
 - what tasks exist
@@ -21,6 +26,21 @@ Runtime truth is not graph truth and not task-contract truth.
 - what needs feedback now
 - what is ready for review now
 
+## Current CLI Runtime States
+
+- `in_progress`
+- `blocked`
+- `needs_feedback`
+- `done`
+
+## Workflow Outputs Not Yet Persisted As CLI State
+
+- review ready
+- localized re-shape required
+- strategic re-route required
+
+These can still be skill outputs and handoff states even when the CLI does not store them directly.
+
 ## Execution States To Surface
 
 - in progress
@@ -29,3 +49,12 @@ Runtime truth is not graph truth and not task-contract truth.
 - review ready
 - localized re-shape required
 - strategic re-route required
+
+## Useful CLI Reads
+
+- `superplan task current`
+- `superplan task next`
+- `superplan task why-next`
+- `superplan task why <task_id>`
+- `superplan task events [task_id]`
+- `superplan status`
