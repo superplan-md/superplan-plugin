@@ -4,10 +4,12 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const {
+  loadDistModule,
   makeSandbox,
   parseCliJson,
   pathExists,
   runCli,
+  withSandboxEnv,
 } = require('./helpers.cjs');
 
 test('setup quiet installs bundled global assets into the configured home directory', async () => {
@@ -32,6 +34,31 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan run --json/);
   assert.match(installedUsingSuperplanSkill, /superplan status --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task why-next --json/);
+});
+
+test('interactive setup prints a single ascii wordmark that includes .md', async () => {
+  const sandbox = await makeSandbox('superplan-setup-banner-');
+  const { setup } = loadDistModule('cli/commands/setup.js', {
+    select: async () => 'skip',
+  });
+
+  const originalConsoleLog = console.log;
+  const output = [];
+  console.log = (...args) => {
+    output.push(args.join(' '));
+  };
+
+  try {
+    const result = await withSandboxEnv(sandbox, async () => setup({ json: false, quiet: false }));
+    assert.equal(result.ok, true);
+    assert.equal(result.data.scope, 'skip');
+  } finally {
+    console.log = originalConsoleLog;
+  }
+
+  const bannerOutput = output.join('\n');
+  assert.doesNotMatch(bannerOutput, /SUPERPLAN\.md\s*\n\s*\n/);
+  assert.match(bannerOutput, /\.___\s+__\.\s+_______/);
 });
 
 test('doctor reports valid after quiet global setup in a clean repo', async () => {

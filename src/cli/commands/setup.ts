@@ -38,6 +38,15 @@ interface VerificationIssue {
   message: string;
 }
 
+const SETUP_BANNER = `
+ ____  _   _ ____  _____ ____  ____  _        _    _   _
+/ ___|| | | |  _ \\| ____|  _ \\|  _ \\| |      / \\  | \\ | |
+\\___ \\| | | | |_) |  _| | |_) | |_) | |     / _ \\ |  \\| |
+ ___) | |_| |  __/| |___|  _ <|  __/| |___ / ___ \\| |\\  |
+|____/ \\___/|_|   |_____|_| \\_\\_|   |_____/_/   \\_\\_| \\_|
+
+`;
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -423,6 +432,10 @@ function getNoAgentsMessage(scope: InstallScope, agentCount: number): string | u
   return 'No agent environments found in this repo or your home directory.';
 }
 
+function printSetupBanner(): void {
+  console.log(SETUP_BANNER);
+}
+
 export async function setup(options: SetupOptions): Promise<SetupResult> {
   try {
     if (options.json && !options.quiet) {
@@ -434,6 +447,10 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
           retryable: false,
         },
       };
+    }
+
+    if (!options.quiet) {
+      printSetupBanner();
     }
 
     const cwd = process.cwd();
