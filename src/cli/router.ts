@@ -3,6 +3,7 @@ import { doctor } from './commands/doctor';
 import { parse } from './commands/parse';
 import { init } from './commands/init';
 import { task } from './commands/task';
+import { purge, remove } from './commands/remove';
 
 type CommandOptions = {
   json: boolean;
@@ -15,6 +16,8 @@ type CommandHandler = (args: string[], options: CommandOptions) => Promise<{
 export const router: Record<string, CommandHandler> = {
   init: async () => init(),
   setup: async (_args, options) => setup(options),
+  remove: async (_args, options) => remove(options),
+  purge: async (_args, options) => purge(options),
   doctor: async () => doctor(),
   parse: async (args, options) => parse(args, options),
   task: async (args) => task(args),

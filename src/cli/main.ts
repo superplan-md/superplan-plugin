@@ -10,6 +10,8 @@ Usage:
 Commands:
   init        Initialize Superplan in this repo
   setup       Setup Superplan globally
+  remove      Remove Superplan installation
+  purge       Purge Superplan installation
   doctor      Validate setup
   parse       Parse superplan artifacts
   task        Task operations
