@@ -17,12 +17,15 @@
 
 - confirm it does not silently replan work that belongs back in `shape-work`
 - confirm strategic goal change routes up to `route-work`
+- confirm it uses current CLI commands for runtime inspection and transitions
+- confirm it does not pretend `review` is a persisted runtime state today
 
 ## Handoff Check
 
 - review-ready work hands off to `review-task-against-ac`
 - structural drift hands off to `shape-work`
 - strategic drift hands off to `route-work`
+- blocked and feedback states route through current CLI transitions, not markdown edits
 
 ## Pressure Scenario
 
@@ -30,4 +33,4 @@
 
 ## Pass Condition
 
-The skill uses bounded execution, classifies change as local, structural, or strategic, and routes review, re-shape, or re-route explicitly instead of replanning silently.
+The skill uses bounded execution, relies on the current CLI control plane, classifies change as local, structural, or strategic, and routes review, re-shape, or re-route explicitly instead of replanning silently.

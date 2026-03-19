@@ -61,6 +61,42 @@ Do not collapse execution into a flat task-file-only mindset.
 
 See `references/runtime-state.md`.
 
+## CLI Alignment Now
+
+Align execution to the CLI that exists today.
+
+Current CLI execution surface:
+
+- `superplan task current`
+- `superplan task next`
+- `superplan task why-next`
+- `superplan task show [task_id]`
+- `superplan task why <task_id>`
+- `superplan task events [task_id]`
+- `superplan task start <task_id>`
+- `superplan task resume <task_id>`
+- `superplan task block <task_id> --reason <reason>`
+- `superplan task request-feedback <task_id> --message <message>`
+- `superplan task complete <task_id>`
+- `superplan task fix`
+- `superplan task reset <task_id>`
+- `superplan run`
+- `superplan status`
+
+Current CLI truth:
+
+- readiness is computed from parsed task contracts plus runtime state
+- runtime states currently include `in_progress`, `done`, `blocked`, and `needs_feedback`
+- runtime events are append-only in `.superplan/runtime/events.ndjson`
+- review is still a workflow handoff, not a dedicated CLI lifecycle state
+
+Therefore:
+
+- use CLI transitions instead of hand-editing execution state
+- use `task why` and `task why-next` when the frontier is unclear
+- use `task events` when runtime history matters
+- keep "ready for AC review" as a workflow output even though the current CLI does not store `review` as runtime state
+
 ## Trajectory Change Model
 
 Classify discovered changes into three buckets:
@@ -86,6 +122,10 @@ See `references/trajectory-changes.md`.
 - dispatch verification in parallel where safe and useful
 - route through existing repo scripts, custom skills, or harnesses when those are the trusted path
 - begin task execution
+- inspect the frontier with `superplan task current`, `superplan task next`, `superplan task why-next`, and `superplan status`
+- inspect specific readiness or blockage with `superplan task why <task_id>`
+- inspect runtime history with `superplan task events [task_id]`
+- repair invalid runtime drift deterministically with `superplan task fix` or `superplan task reset <task_id>` when warranted
 - surface blocked state
 - surface needs-feedback state
 - route toward review when work appears ready
@@ -109,10 +149,12 @@ See `references/subagent-dispatch.md`.
 - broad replanning by default
 - reshaping the graph unless truly necessary
 - hand-editing lifecycle state ad hoc
+- claiming the current CLI has a persisted `review` runtime state
 - claiming completion without review
 - continuing blindly when blocked or feedback is clearly needed
 - spawning subagents without bounded ownership
 - parallelizing work that shares unstable assumptions or tight write conflicts
+- ignoring `task why`, `task why-next`, or `task fix` when runtime or readiness is unclear
 - treating every discovered issue as a reason to reshape
 - replacing a working user-owned harness with a Superplan-specific flow during execution
 
@@ -127,6 +169,7 @@ Expected output categories:
 - blocked with reason
 - needs feedback
 - ready for AC review
+- runtime repaired
 - localized re-shape required
 - strategic re-route required
 - execution cannot continue safely
@@ -167,19 +210,32 @@ Internal support-skill usage may include:
 - `test-driven-development`
 - `verification-before-completion`
 
-## Future CLI Hooks
+Execution handoff to `review-task-against-ac` should name the evidence gathered and the CLI/runtime facts that support the review.
 
+## CLI Hooks
+
+Current CLI:
+
+- `superplan task current`
 - `superplan task next`
-- `superplan task start`
-- `superplan task block`
-- `superplan task request-feedback`
+- `superplan task why-next`
+- `superplan task show [task_id]`
+- `superplan task why <task_id>`
+- `superplan task events [task_id]`
+- `superplan task start <task_id>`
+- `superplan task resume <task_id>`
+- `superplan task block <task_id> --reason <reason>`
+- `superplan task request-feedback <task_id> --message <message>`
+- `superplan task complete <task_id>`
+- `superplan task fix`
+- `superplan task reset <task_id>`
+- `superplan run`
+- `superplan status`
+
+Future CLI hooks:
+
 - `superplan task review`
-- `superplan task complete`
-- `superplan task show --json`
-- `superplan doctor --json`
-- `superplan run frontier`
 - `superplan run dispatch`
-- `superplan run status`
 - `superplan run reconcile`
 
 ## Validation Cases
@@ -193,11 +249,25 @@ Should dispatch subagents in parallel:
 - when multiple ready tasks have disjoint write surfaces
 - when verification can run independently of implementation without invalidating the result
 
+Should use the CLI control plane explicitly:
+
+- `superplan task next` or `superplan run` to select or start work
+- `superplan task why` or `superplan task why-next` when readiness is unclear
+- `superplan task block` or `superplan task request-feedback` when execution must pause
+- `superplan task resume` when paused work becomes executable again
+- `superplan task events` when runtime history matters
+- `superplan task fix` or `superplan task reset` when runtime state has drifted
+
 Should avoid parallelism:
 
 - when tasks depend on unstable shared assumptions
 - when verification depends on a moving implementation target
 - when write conflicts are likely
+
+Should not overclaim current CLI support:
+
+- review-ready may be a workflow output without a persisted CLI review state
+- `run` and `status` exist today, but richer `run dispatch` and `run reconcile` do not
 
 Should classify trajectory change as local:
 
