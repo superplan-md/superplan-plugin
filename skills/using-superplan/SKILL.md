@@ -58,6 +58,30 @@ Assumptions:
 - route to `context-bootstrap-sync` when missing context is the real blocker
 - give brief readiness guidance when setup or initialization is missing
 
+## Current CLI Loop
+
+When Superplan is active in a repo, prefer the CLI as the execution control plane.
+
+Common commands:
+
+- `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
+- `superplan run --json` to claim the next ready task or continue the active task
+- `superplan task why-next --json` to explain why the current frontier was selected
+- `superplan task show <task_id> --json` to inspect the selected task contract
+- `superplan task why <task_id> --json` to understand why a task is not ready
+- `superplan task block <task_id> --reason "<reason>" --json` when execution cannot safely continue
+- `superplan task request-feedback <task_id> --message "<message>" --json` when the user must respond
+- `superplan task complete <task_id> --json` after the work and acceptance criteria are satisfied
+- `superplan task fix --json` when runtime state becomes inconsistent
+
+Execution default:
+
+1. check `superplan status --json`
+2. claim work with `superplan run --json`
+3. inspect the chosen task with `superplan task show <task_id> --json`
+4. execute through the workflow spine, especially `execute-task-graph`, instead of ad hoc task mutation
+5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
+
 ## Routing Model
 
 Treat Superplan as a workflow spine with support disciplines underneath it.
@@ -134,12 +158,14 @@ Likely handoffs:
 - `context-bootstrap-sync`
 - no further Superplan action
 
-## Future CLI Hooks
+## Current CLI Hooks
 
-- `superplan doctor --readiness`
-- `superplan init`
-- `superplan status`
-- `superplan context status`
+- `superplan doctor --json`
+- `superplan init --json`
+- `superplan status --json`
+- `superplan run --json`
+- `superplan task next --json`
+- `superplan task why-next --json`
 
 ## Validation Cases
 

@@ -142,6 +142,19 @@ Runtime summary should keep legible:
 - which decisions were recorded
 - which gotchas were learned
 
+## Current CLI Loop
+
+Use the runtime-aware CLI as the scheduler:
+
+1. `superplan status --json` to inspect the frontier
+2. `superplan run --json` to continue the current task or claim the next ready task
+3. `superplan task show <task_id> --json` before editing code
+4. `superplan task why <task_id> --json` when readiness is unclear
+5. `superplan task block <task_id> --reason "<reason>" --json` when blocked
+6. `superplan task request-feedback <task_id> --message "<message>" --json` when user input is required
+7. `superplan task complete <task_id> --json` only after the task contract is actually satisfied
+8. `superplan task fix --json` if runtime state becomes inconsistent
+
 ## Decision And Gotcha Rules
 
 Use `.superplan/decisions.md` for meaningful execution choices, such as trajectory changes, major blocker handling, or review-routing decisions that future agents need to preserve.
@@ -167,20 +180,20 @@ Internal support-skill usage may include:
 - `test-driven-development`
 - `verification-before-completion`
 
-## Future CLI Hooks
+## Current CLI Hooks
 
-- `superplan task next`
-- `superplan task start`
-- `superplan task block`
-- `superplan task request-feedback`
-- `superplan task review`
-- `superplan task complete`
-- `superplan task show --json`
+- `superplan task next --json`
+- `superplan task start <task_id> --json`
+- `superplan task block <task_id> --reason "<reason>" --json`
+- `superplan task request-feedback <task_id> --message "<message>" --json`
+- `superplan task complete <task_id> --json`
+- `superplan task show <task_id> --json`
+- `superplan task why-next --json`
+- `superplan task why <task_id> --json`
+- `superplan task fix --json`
 - `superplan doctor --json`
-- `superplan run frontier`
-- `superplan run dispatch`
-- `superplan run status`
-- `superplan run reconcile`
+- `superplan status --json`
+- `superplan run --json`
 
 ## Validation Cases
 
