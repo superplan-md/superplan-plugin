@@ -1,0 +1,280 @@
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+interface ParseOptions {
+  json?: boolean;
+}
+
+interface AcceptanceCriterion {
+  text: string;
+  done: boolean;
+}
+
+interface ParseDiagnostic {
+  code: string;
+  message: string;
+}
+
+interface ParsedTask {
+  task_id: string;
+  status: string;
+  description: string;
+  acceptance_criteria: AcceptanceCriterion[];
+  total_acceptance_criteria: number;
+  completed_acceptance_criteria: number;
+  progress_percent: number;
+  effective_status: 'draft' | 'in_progress' | 'done';
+}
+
+type ParseResult =
+  | { ok: true; data: { tasks: ParsedTask[]; diagnostics: ParseDiagnostic[] } }
+  | { ok: false; error: { code: string; message: string; retryable: boolean } };
+
+function parseFrontmatter(lines: string[]): { task_id: string; status: string; contentStartIndex: number } {
+  let taskId = '';
+  let status = '';
+
+  if (lines[0] !== '---') {
+    return { task_id: taskId, status, contentStartIndex: 0 };
+  }
+
+  let index = 1;
+  while (index < lines.length && lines[index] !== '---') {
+    const line = lines[index];
+    const separatorIndex = line.indexOf(':');
+
+    if (separatorIndex !== -1) {
+      const key = line.slice(0, separatorIndex).trim();
+      const value = line.slice(separatorIndex + 1).trim();
+
+      if (key === 'task_id') {
+        taskId = value;
+      } else if (key === 'status') {
+        status = value;
+      }
+    }
+
+    index += 1;
+  }
+
+  return {
+    task_id: taskId,
+    status,
+    contentStartIndex: index < lines.length ? index + 1 : lines.length,
+  };
+}
+
+function parseSections(lines: string[]): Record<string, string[]> {
+  const sections: Record<string, string[]> = {};
+  let currentSection = '';
+
+  for (const line of lines) {
+    if (line.startsWith('## ')) {
+      currentSection = line.slice(3).trim();
+      if (!(currentSection in sections)) {
+        sections[currentSection] = [];
+      }
+      continue;
+    }
+
+    if (currentSection) {
+      sections[currentSection].push(line);
+    }
+  }
+
+  return sections;
+}
+
+function normalizeSectionText(lines: string[] | undefined): string {
+  if (!lines) {
+    return '';
+  }
+
+  return lines.join('\n').trim();
+}
+
+function parseAcceptanceCriteria(lines: string[] | undefined): AcceptanceCriterion[] {
+  if (!lines) {
+    return [];
+  }
+
+  const criteria: AcceptanceCriterion[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line.startsWith('- [')) {
+      continue;
+    }
+
+    const closingBracketIndex = line.indexOf(']');
+    if (closingBracketIndex === -1) {
+      continue;
+    }
+
+    const marker = line.slice(3, closingBracketIndex).trim().toLowerCase();
+    const text = line.slice(closingBracketIndex + 1).trim();
+
+    if (!text) {
+      continue;
+    }
+
+    if (marker === '' || marker === 'x') {
+      criteria.push({
+        text,
+        done: marker === 'x',
+      });
+    }
+  }
+
+  return criteria;
+}
+
+function computeEffectiveStatus(criteria: AcceptanceCriterion[]): 'draft' | 'in_progress' | 'done' {
+  if (criteria.length === 0) {
+    return 'draft';
+  }
+
+  const completedCount = criteria.filter(criterion => criterion.done).length;
+
+  if (completedCount === criteria.length) {
+    return 'done';
+  }
+
+  if (completedCount > 0) {
+    return 'in_progress';
+  }
+
+  return 'draft';
+}
+
+function buildTaskDiagnostics(task: ParsedTask, filePath: string): ParseDiagnostic[] {
+  const diagnostics: ParseDiagnostic[] = [];
+  const fileLabel = path.relative(process.cwd(), filePath) || filePath;
+
+  if (!task.task_id) {
+    diagnostics.push({
+      code: 'TASK_ID_MISSING',
+      message: `Missing task_id in ${fileLabel}`,
+    });
+  }
+
+  if (!task.description.trim()) {
+    diagnostics.push({
+      code: 'DESCRIPTION_EMPTY',
+      message: `Description is empty in ${fileLabel}`,
+    });
+  }
+
+  if (task.acceptance_criteria.length === 0) {
+    diagnostics.push({
+      code: 'ACCEPTANCE_CRITERIA_MISSING',
+      message: `Acceptance criteria missing in ${fileLabel}`,
+    });
+  }
+
+  return diagnostics;
+}
+
+function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagnostics: ParseDiagnostic[] } {
+  const frontmatter = parseFrontmatter(lines);
+  const sections = parseSections(lines.slice(frontmatter.contentStartIndex));
+  const description = normalizeSectionText(sections.Description);
+  const acceptanceCriteria = parseAcceptanceCriteria(sections['Acceptance Criteria']);
+  const totalAcceptanceCriteria = acceptanceCriteria.length;
+  const completedAcceptanceCriteria = acceptanceCriteria.filter(criterion => criterion.done).length;
+  const progressPercent = totalAcceptanceCriteria === 0
+    ? 0
+    : Math.round((completedAcceptanceCriteria / totalAcceptanceCriteria) * 100);
+
+  const task: ParsedTask = {
+    task_id: frontmatter.task_id,
+    status: frontmatter.status,
+    description,
+    acceptance_criteria: acceptanceCriteria,
+    total_acceptance_criteria: totalAcceptanceCriteria,
+    completed_acceptance_criteria: completedAcceptanceCriteria,
+    progress_percent: progressPercent,
+    effective_status: computeEffectiveStatus(acceptanceCriteria),
+  };
+
+  return {
+    task,
+    diagnostics: buildTaskDiagnostics(task, filePath),
+  };
+}
+
+async function resolveTaskFiles(targetPath: string): Promise<string[]> {
+  const stats = await fs.stat(targetPath);
+
+  if (stats.isFile()) {
+    return [targetPath];
+  }
+
+  const tasksDir = path.join(targetPath, 'tasks');
+  const taskEntries = await fs.readdir(tasksDir, { withFileTypes: true });
+
+  return taskEntries
+    .filter(entry => entry.isFile() && entry.name.endsWith('.md'))
+    .map(entry => path.join(tasksDir, entry.name))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+async function parseTaskFile(filePath: string): Promise<{ task: ParsedTask; diagnostics: ParseDiagnostic[] }> {
+  const content = await fs.readFile(filePath, 'utf-8');
+  const lines = content.split(/\r?\n/);
+  return buildTask(lines, filePath);
+}
+
+export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
+  const positionalArgs = args.filter(arg => arg !== '--json');
+  const inputPath = positionalArgs[0];
+
+  if (!inputPath) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_PATH_REQUIRED',
+        message: 'Task file path is required',
+        retryable: false,
+      },
+    };
+  }
+
+  const resolvedInputPath = path.resolve(process.cwd(), inputPath);
+
+  try {
+    const taskFiles = await resolveTaskFiles(resolvedInputPath);
+    const tasks: ParsedTask[] = [];
+    const diagnostics: ParseDiagnostic[] = [];
+
+    for (const taskFile of taskFiles) {
+      try {
+        const parsed = await parseTaskFile(taskFile);
+        tasks.push(parsed.task);
+        diagnostics.push(...parsed.diagnostics);
+      } catch {
+        diagnostics.push({
+          code: 'TASK_READ_FAILED',
+          message: `Failed to read task file ${path.relative(process.cwd(), taskFile) || taskFile}`,
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        tasks,
+        diagnostics,
+      },
+    };
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_READ_FAILED',
+        message: 'Failed to read task file',
+        retryable: false,
+      },
+    };
+  }
+}

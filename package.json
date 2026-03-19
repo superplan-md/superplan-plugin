@@ -1,0 +1,19 @@
+{
+  "name": "superplan",
+  "version": "0.1.0",
+  "description": "Superplan CLI",
+  "bin": {
+    "superplan": "./dist/cli/main.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node ./dist/cli/main.js"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
