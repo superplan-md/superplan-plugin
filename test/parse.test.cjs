@@ -9,7 +9,7 @@ const {
   writeFile,
 } = require('./helpers.cjs');
 
-test('parse defaults to changes directory and reports missing directory gracefully', async () => {
+test('parse defaults to .superplan/changes and reports missing directory gracefully', async () => {
   const sandbox = await makeSandbox('superplan-parse-missing-');
   const result = await runCli(['parse', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(result);
@@ -23,7 +23,7 @@ test('parse defaults to changes directory and reports missing directory graceful
 
 test('parse extracts task fields, dependencies, priority, and acceptance criteria from a task file', async () => {
   const sandbox = await makeSandbox('superplan-parse-file-');
-  const taskPath = path.join(sandbox.cwd, 'changes', 'feature-a', 'tasks', 'T-001.md');
+  const taskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'feature-a', 'tasks', 'T-001.md');
 
   await writeFile(taskPath, `---
 task_id: T-001
@@ -67,7 +67,7 @@ Ship the parser
 test('parse reports duplicate ids and invalid task diagnostics across a change set', async () => {
   const sandbox = await makeSandbox('superplan-parse-diagnostics-');
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 ---
@@ -79,7 +79,7 @@ Valid enough
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-002.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-002.md'), `---
 task_id: T-001
 status: draft
 ---

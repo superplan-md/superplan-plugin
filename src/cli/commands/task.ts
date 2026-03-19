@@ -205,7 +205,7 @@ function getTaskInvalidError(): TaskErrorResult {
   };
 }
 
-function getTaskCommandHelpMessage(options: {
+export function getTaskCommandHelpMessage(options: {
   subcommand?: string;
   requiresTaskId?: boolean;
 }): string {
@@ -222,24 +222,26 @@ function getTaskCommandHelpMessage(options: {
     intro,
     '',
     'Available task commands:',
-    '  list                         List all tasks',
+    'Task commands:',
+    '  next                         Pick the next ready task',
     '  current                      Show the current in-progress task',
-    '  next                         Show the next task to work on',
-    '  why-next                     Explain why the next task was selected',
     '  show [task_id]               Show one task or all tasks',
-    '  why <task_id>                Explain why a task is or is not ready',
-    '  events [task_id]             Show runtime event history',
-    '  start <task_id>              Start a task',
-    '  resume <task_id>             Resume a blocked or feedback task',
-    '  complete <task_id>           Complete an in-progress task',
+    '  start <task_id>              Start a specific ready task',
+    '  complete <task_id>           Finish an in-progress task after the criteria are done',
+    '  block <task_id> --reason     Pause a task because something external is blocking it',
+    '  request-feedback <task_id>   Pause a task because you need user input',
+    '  resume <task_id>             Continue a blocked or feedback task',
+    '  list                         List all parsed tasks',
     '  fix                          Repair runtime conflicts deterministically',
-    '  reset <task_id>              Clear runtime state for a task',
-    '  block <task_id> --reason     Mark a task as blocked',
-    '  request-feedback <task_id>   Mark a task as needing feedback',
+    '',
+    'For a fast start: superplan run',
+    '',
+    'Diagnostic commands still exist but are intentionally hidden from the default help surface.',
     '',
     'Examples:',
     '  superplan task next',
     '  superplan task show T-001',
+    '  superplan task --help',
     '  superplan task start T-001',
     '  superplan task block T-001 --reason "Waiting on review"',
   ].join('\n');

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { routeCommand, router } from './router';
+import { getTaskCommandHelpMessage } from './commands/task';
 
 const { version } = require('../../package.json') as { version: string };
 
@@ -51,6 +52,7 @@ async function main() {
   const command = args[0];
   const json = args.includes('--json');
   const quiet = args.includes('--quiet');
+  const showHelp = args.includes('--help') || command === 'help';
   const showVersion = args.includes('-v') || args.includes('--version') || args.includes('--vesrsion');
 
   if (showVersion) {
@@ -68,7 +70,23 @@ async function main() {
     return;
   }
 
-  if (command === undefined || command === '--json' || command === '--quiet') {
+  if (command === 'task' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getTaskCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === undefined || command === '--json' || command === '--quiet' || showHelp) {
     if (json || quiet) {
       printJsonResult({
         ok: false,

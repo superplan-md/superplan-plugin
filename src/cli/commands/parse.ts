@@ -350,7 +350,7 @@ async function resolveDefaultTaskFiles(changesDir: string): Promise<string[]> {
 
 export async function parse(args: string[], _options: ParseOptions): Promise<ParseResult> {
   const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet');
-  const inputPath = positionalArgs[0] ?? 'changes';
+  const inputPath = positionalArgs[0] ?? path.join('.superplan', 'changes');
   const resolvedInputPath = path.resolve(process.cwd(), inputPath);
 
   try {
@@ -364,7 +364,7 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
           diagnostics: [
             {
               code: 'CHANGES_DIR_MISSING',
-              message: 'No changes directory found. Run superplan init.',
+              message: 'No .superplan/changes directory found. Run superplan init.',
             },
           ],
         },

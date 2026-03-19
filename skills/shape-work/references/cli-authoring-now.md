@@ -7,7 +7,7 @@ Use this reference when shaping work against the current CLI implementation.
 March 17 defines the target artifact model as:
 
 ```text
-changes/<slug>/
+.superplan/changes/<slug>/
   tasks.md
   tasks/
     T-001.md
@@ -20,7 +20,7 @@ But the current CLI does **not** parse or validate `tasks.md` yet.
 
 Today, the executable surface is narrower:
 
-- `superplan init` creates `.superplan/` and `changes/`
+- `superplan init` creates `.superplan/` and `.superplan/changes/`
 - `superplan parse [path] --json` parses task contract markdown files
 - `superplan task list|show|next|start|complete` operates on parsed task files plus runtime state
 - `superplan doctor` checks installation and setup, not shaped work
@@ -28,7 +28,7 @@ Today, the executable surface is narrower:
 So shape work like this:
 
 - author `tasks.md` only when graph visibility adds supervision value
-- keep task contracts in `changes/<slug>/tasks/T-xxx.md`
+- keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`
 - validate task contracts with `superplan parse`
 - inspect readiness with `superplan task`
 - do not claim the current CLI validates `tasks.md`
@@ -36,11 +36,11 @@ So shape work like this:
 ## Current Authoring Workflow
 
 1. Run `superplan init` if the repo is not initialized.
-2. Create `changes/<slug>/`.
-3. Create `changes/<slug>/tasks/`.
-4. Optionally create `changes/<slug>/tasks.md` as the human graph/index.
+2. Create `.superplan/changes/<slug>/`.
+3. Create `.superplan/changes/<slug>/tasks/`.
+4. Optionally create `.superplan/changes/<slug>/tasks.md` as the human graph/index.
 5. Create one `T-xxx.md` file per executable task.
-6. Run `superplan parse --json changes/<slug>`.
+6. Run `superplan parse --json .superplan/changes/<slug>`.
 7. Fix diagnostics until each executable task is valid.
 8. Use `superplan task show`, `superplan task list`, or `superplan task next` to confirm the ready frontier.
 9. Hand off to execution with the exact validation commands already named.

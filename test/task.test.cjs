@@ -14,7 +14,7 @@ const {
 test('task next, why-next, and status reflect priority-aware ready selection', async () => {
   const sandbox = await makeSandbox('superplan-task-priority-');
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-001.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), `---
 task_id: T-001
 status: pending
 priority: low
@@ -27,7 +27,7 @@ Low priority task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-002.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-002.md'), `---
 task_id: T-002
 status: pending
 priority: high
@@ -40,7 +40,7 @@ High priority task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-003.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-003.md'), `---
 task_id: T-003
 status: pending
 ---
@@ -83,7 +83,7 @@ Default priority task
 test('run starts the next task and then continues it on the next invocation', async () => {
   const sandbox = await makeSandbox('superplan-run-loop-');
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-100.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-100.md'), `---
 task_id: T-100
 status: pending
 priority: high
@@ -126,7 +126,7 @@ Run me
 test('task lifecycle supports block, resume, request-feedback, and reset with runtime events', async () => {
   const sandbox = await makeSandbox('superplan-task-lifecycle-');
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-200.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-200.md'), `---
 task_id: T-200
 status: pending
 priority: high
@@ -195,7 +195,7 @@ Lifecycle task
 test('task complete succeeds only for fully satisfied acceptance criteria', async () => {
   const sandbox = await makeSandbox('superplan-task-complete-');
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-300.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-300.md'), `---
 task_id: T-300
 status: pending
 ---
@@ -234,7 +234,7 @@ Complete me
 test('task fix repairs runtime conflicts and doctor deep reports the remaining structural issues', async () => {
   const sandbox = await makeSandbox('superplan-task-fix-');
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-401.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-401.md'), `---
 task_id: T-401
 status: pending
 ---
@@ -246,7 +246,7 @@ Valid task
 - [ ] A
 `);
 
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-402.md'), `---
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-402.md'), `---
 task_id: T-402
 status: pending
 depends_on_all: [T-999]

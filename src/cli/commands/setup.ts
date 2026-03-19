@@ -464,7 +464,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
     const localSuperplanDir = path.join(cwd, '.superplan');
     const localConfigPath = path.join(localSuperplanDir, 'config.toml');
     const localSkillsDir = path.join(localSuperplanDir, 'skills');
-    const localChangesDir = path.join(cwd, 'changes');
+    const localChangesDir = path.join(localSuperplanDir, 'changes');
 
     const alreadySetup = await pathExists(globalConfigPath) || await pathExists(localSuperplanDir);
     if (alreadySetup && !options.quiet) {

@@ -198,7 +198,7 @@ async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<
 
     const globalSuperplanDir = path.join(homeDir, '.config', 'superplan');
     const localSuperplanDir = path.join(cwd, '.superplan');
-    const localChangesDir = path.join(cwd, 'changes');
+    const localChangesDir = path.join(localSuperplanDir, 'changes');
 
     const scope = await select<RemoveScope>({
       message: `Where do you want to ${mode} Superplan?`,
@@ -250,10 +250,7 @@ async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<
     if (scope === 'local' || scope === 'both') {
       await removeAgentInstalls(localAgents, managedSkillNames, removedPaths);
       await removePath(localSuperplanDir, removedPaths);
-
-      if (mode === 'purge') {
-        await removePath(localChangesDir, removedPaths);
-      }
+      await removePath(localChangesDir, removedPaths);
     }
 
     return {

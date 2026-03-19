@@ -27,7 +27,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
   const configPath = path.join(superplanRoot, 'config.toml');
   const contextDir = path.join(superplanRoot, 'context');
   const runtimeDir = path.join(superplanRoot, 'runtime');
-  const changesDir = path.join(cwd, 'changes');
+  const changesDir = path.join(superplanRoot, 'changes');
   const globalConfigPath = path.join(os.homedir(), '.config', 'superplan', 'config.toml');
 
   try {

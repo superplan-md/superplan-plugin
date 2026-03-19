@@ -10,11 +10,11 @@ const {
   writeFile,
 } = require('./helpers.cjs');
 
-test('remove deletes local superplan state but leaves changes intact', async () => {
+test('remove deletes local superplan state including .superplan changes', async () => {
   const sandbox = await makeSandbox('superplan-remove-local-');
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'using-superplan', 'SKILL.md'), '# using-superplan\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'execute-task-graph', 'SKILL.md'), '# execute-task-graph\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'custom-skill', 'SKILL.md'), '# custom\n');
@@ -33,14 +33,14 @@ test('remove deletes local superplan state but leaves changes intact', async () 
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'using-superplan')), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'execute-task-graph')), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'custom-skill', 'SKILL.md')), true);
-  assert.equal(await pathExists(path.join(sandbox.cwd, 'changes')), true);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')), false);
 });
 
-test('purge deletes local superplan state and changes directory', async () => {
+test('purge deletes local superplan state and .superplan changes directory', async () => {
   const sandbox = await makeSandbox('superplan-purge-local-');
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
-  await writeFile(path.join(sandbox.cwd, 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
 
   const { purge } = loadDistModule('cli/commands/remove.js', {
     select: async () => 'local',
@@ -53,5 +53,5 @@ test('purge deletes local superplan state and changes directory', async () => {
   assert.equal(result.data.scope, 'local');
   assert.equal(result.data.mode, 'purge');
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
-  assert.equal(await pathExists(path.join(sandbox.cwd, 'changes')), false);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')), false);
 });

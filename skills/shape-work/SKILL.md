@@ -83,12 +83,12 @@ Align shaping to the CLI that exists today, not only to future command ideas.
 
 Product target:
 
-- `changes/<slug>/tasks.md` is the human-readable graph/index surface
-- `changes/<slug>/tasks/T-xxx.md` are the executable task contracts
+- `.superplan/changes/<slug>/tasks.md` is the human-readable graph/index surface
+- `.superplan/changes/<slug>/tasks/T-xxx.md` are the executable task contracts
 
 Current CLI reality:
 
-- `superplan init` creates `.superplan/` and `changes/`
+- `superplan init` creates `.superplan/` and `.superplan/changes/`
 - `superplan parse [path] --json` parses task contract files, not `tasks.md`
 - `superplan task list|show|next` computes current task validity and readiness from task files plus runtime state
 - `superplan doctor` checks setup and installation readiness, not shaped work correctness
@@ -116,7 +116,7 @@ Treat the workspace's existing setup as the default operating surface.
 - create one normal task for `task`
 - create `plan.md` plus tasks for `slice` when sequencing matters
 - create specs when misunderstanding the target is a bigger risk than sequencing
-- create `changes/<slug>/tasks.md` as a human graph/index when dependency visibility is useful
+- create `.superplan/changes/<slug>/tasks.md` as a human graph/index when dependency visibility is useful
 - create a richer graph, plan, spec, and task set for `program` when the work genuinely needs all layers
 - classify sub-work as `parallel-safe`, `serial`, or `wait-for-clarity`
 - create investigation or uncertainty-reduction tasks

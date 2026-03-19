@@ -135,5 +135,5 @@ test('init quiet creates repository scaffolding after setup is complete', async 
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'runtime')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, 'changes')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')));
 });
