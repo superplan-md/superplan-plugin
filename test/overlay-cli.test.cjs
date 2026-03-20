@@ -207,6 +207,72 @@ Launch overlay companion
   assert.match(launchOutput, new RegExp(`${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
 });
 
+test('overlay ensure launches the macOS app bundle through open with the explicit workspace path', async (t) => {
+  if (process.platform !== 'darwin') {
+    t.skip('macOS-specific launcher behavior');
+    return;
+  }
+
+  const sandbox = await makeSandbox('superplan-overlay-launch-app-');
+  const overlayOutputPath = path.join(sandbox.root, 'overlay-launch-app.txt');
+  const fakeAppPath = path.join(sandbox.root, 'Fake Overlay.app');
+  const fakeExecutablePath = path.join(fakeAppPath, 'Contents', 'MacOS', 'fake-overlay');
+  const infoPlistPath = path.join(fakeAppPath, 'Contents', 'Info.plist');
+
+  await fs.mkdir(path.dirname(fakeExecutablePath), { recursive: true });
+  await writeFile(fakeExecutablePath, `#!/bin/sh
+printf '%s\n' "$*" > ${JSON.stringify(overlayOutputPath)}
+`);
+  await fs.chmod(fakeExecutablePath, 0o755);
+  await writeFile(infoPlistPath, `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>CFBundleExecutable</key>
+    <string>fake-overlay</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.superplan.test.fake-overlay</string>
+    <key>CFBundleName</key>
+    <string>Fake Overlay</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+  </dict>
+</plist>
+`);
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-011A.md'), `---
+task_id: T-011A
+status: pending
+priority: high
+---
+
+## Description
+Launch overlay companion app bundle
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const ensurePayload = parseCliJson(await runCli(['overlay', 'ensure', '--json'], {
+    cwd: sandbox.cwd,
+    env: {
+      ...sandbox.env,
+      SUPERPLAN_OVERLAY_APP_PATH: fakeAppPath,
+    },
+  }));
+  const realWorkspacePath = await fs.realpath(sandbox.cwd);
+  const launchOutput = await waitForFile(overlayOutputPath, 5000);
+
+  assert.equal(ensurePayload.ok, true);
+  assert.equal(ensurePayload.data.applied_action, 'ensure');
+  assert.equal(ensurePayload.data.companion.attempted, true);
+  assert.equal(ensurePayload.data.companion.launched, true);
+  assert.equal(ensurePayload.data.companion.install_path, fakeAppPath);
+  assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+});
+
 test('task start auto-launches the overlay companion when overlay is enabled', async () => {
   const sandbox = await makeSandbox('superplan-overlay-task-start-');
   const overlayOutputPath = path.join(sandbox.root, 'overlay-task-start.txt');

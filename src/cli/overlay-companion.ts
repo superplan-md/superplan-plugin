@@ -75,6 +75,32 @@ async function resolveExecutableFromInstallPath(
   return null;
 }
 
+function resolveMacosAppBundlePath(
+  installPath: string | null,
+  executablePath: string | null,
+): string | null {
+  const normalizedInstallPath = normalizeConfiguredPath(installPath);
+  if (normalizedInstallPath?.endsWith('.app')) {
+    return normalizedInstallPath;
+  }
+
+  const normalizedExecutablePath = normalizeConfiguredPath(executablePath);
+  if (!normalizedExecutablePath) {
+    return null;
+  }
+
+  let currentPath = path.dirname(normalizedExecutablePath);
+  while (currentPath !== path.dirname(currentPath)) {
+    if (currentPath.endsWith('.app')) {
+      return currentPath;
+    }
+
+    currentPath = path.dirname(currentPath);
+  }
+
+  return null;
+}
+
 async function resolveOverlayCompanionStatusFromPaths(input: {
   source: Exclude<OverlayCompanionSource, null>;
   installPath: string | null;
@@ -183,15 +209,22 @@ export async function launchInstalledOverlayCompanion(
   }
 
   try {
-    const child = spawn(companionStatus.executable_path, ['--workspace', resolvedWorkspacePath], {
+    const commonSpawnOptions = {
       cwd: resolvedWorkspacePath,
       detached: true,
-      stdio: 'ignore',
+      stdio: 'ignore' as const,
       env: {
         ...process.env,
         SUPERPLAN_OVERLAY_WORKSPACE: resolvedWorkspacePath,
       },
-    });
+    };
+    const macosAppBundlePath = process.platform === 'darwin'
+      ? resolveMacosAppBundlePath(companionStatus.install_path, companionStatus.executable_path)
+      : null;
+
+    const child = macosAppBundlePath
+      ? spawn('/usr/bin/open', ['-n', '-a', macosAppBundlePath, '--args', '--workspace', resolvedWorkspacePath], commonSpawnOptions)
+      : spawn(companionStatus.executable_path, ['--workspace', resolvedWorkspacePath], commonSpawnOptions);
 
     child.unref();
 

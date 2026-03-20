@@ -47,17 +47,35 @@ test('overlay release packaging creates a stable macOS tarball from the Tauri ap
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'superplan-overlay-release-macos-'));
   const bundleRoot = path.join(root, 'bundle');
   const outputDir = path.join(root, 'output');
+  const appPath = path.join(bundleRoot, 'macos', 'Superplan Overlay Desktop.app');
   const appExecutable = path.join(
-    bundleRoot,
-    'macos',
-    'Superplan Overlay Desktop.app',
+    appPath,
     'Contents',
     'MacOS',
     'Superplan Overlay Desktop',
   );
+  const infoPlistPath = path.join(appPath, 'Contents', 'Info.plist');
+  const iconPath = path.join(appPath, 'Contents', 'Resources', 'icon.icns');
 
   await fs.mkdir(path.dirname(appExecutable), { recursive: true });
   await fs.writeFile(appExecutable, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  await fs.mkdir(path.dirname(iconPath), { recursive: true });
+  await fs.writeFile(iconPath, 'icon');
+  await fs.writeFile(infoPlistPath, `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>CFBundleExecutable</key>
+    <string>Superplan Overlay Desktop</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.superplan.test.overlay-release</string>
+    <key>CFBundleName</key>
+    <string>Superplan Overlay Desktop</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+  </dict>
+</plist>
+`);
 
   const result = await packageOverlayRelease({
     platform: 'darwin',
@@ -69,6 +87,9 @@ test('overlay release packaging creates a stable macOS tarball from the Tauri ap
 
   assert.equal(path.basename(result.artifactPath), 'superplan-overlay-darwin-arm64.tar.gz');
   assert.match(tarListing, /Superplan Overlay Desktop\.app\/Contents\/MacOS\/Superplan Overlay Desktop/);
+  if (process.platform === 'darwin') {
+    assert.match(tarListing, /Superplan Overlay Desktop\.app\/Contents\/_CodeSignature\/CodeResources/);
+  }
 });
 
 test('overlay release packaging creates a stable Linux AppImage artifact', async () => {

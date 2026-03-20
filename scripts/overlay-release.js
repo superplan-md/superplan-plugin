@@ -102,6 +102,16 @@ async function ensureDirectory(targetPath) {
   await fsp.mkdir(targetPath, { recursive: true });
 }
 
+function adHocSignMacosBundleIfSupported(bundleInputPath, target) {
+  if (target.platform !== 'darwin' || process.platform !== 'darwin') {
+    return;
+  }
+
+  execFileSync('/usr/bin/codesign', ['--force', '--deep', '--sign', '-', '--timestamp=none', bundleInputPath], {
+    stdio: 'inherit',
+  });
+}
+
 async function packageOverlayRelease(options = {}) {
   const target = getOverlayReleaseTarget(
     options.platform ?? process.platform,
@@ -116,6 +126,7 @@ async function packageOverlayRelease(options = {}) {
   await fsp.rm(artifactPath, { force: true });
 
   if (target.artifactKind === 'tar.gz') {
+    adHocSignMacosBundleIfSupported(bundleInputPath, target);
     execFileSync('tar', ['-czf', artifactPath, '-C', path.dirname(bundleInputPath), path.basename(bundleInputPath)], {
       stdio: 'inherit',
     });
