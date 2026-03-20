@@ -16,6 +16,7 @@ import {
 import {
   getBrowserFallbackSnapshot,
   getEmptyRuntimeSnapshot,
+  getAttentionSoundKind,
   hasRenderableSnapshotContent,
   getSnapshotTaskProgress,
   isTauriWindowAvailable,
@@ -214,7 +215,10 @@ function getCompactStatusLabel(viewModel: PrototypeViewModel): string {
   }
 
   if (viewModel.attentionState === 'all_tasks_done') {
-    return 'All tasks done.';
+    const finishedCount = viewModel.columnCounts.done;
+    return finishedCount > 0
+      ? `All tasks done. Finished ${finishedCount} ${finishedCount === 1 ? 'task' : 'tasks'}.`
+      : 'All tasks done.';
   }
 
   if (!viewModel.primaryTask) {
@@ -628,15 +632,28 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
   const statusLabel = getCompactStatusLabel(viewModel);
   const boardLabel = getCompactBoardLabel(viewModel);
 
-  if (viewModel.attentionState === 'needs_feedback') {
-    const feedbackTitle = viewModel.primaryTask?.title ?? 'Task needs your input';
+  if (viewModel.attentionState === 'needs_feedback' || viewModel.attentionState === 'all_tasks_done') {
+    const isDone = viewModel.attentionState === 'all_tasks_done';
+    const doneCount = viewModel.columnCounts.done;
+    const eyebrow = isDone ? 'Session complete' : 'Needs your input';
+    const title = isDone
+      ? 'All tasks done'
+      : viewModel.primaryTask?.title ?? 'Task needs your input';
+    const hint = compactHintMessage ?? (
+      isDone
+        ? doneCount > 0
+          ? `Finished ${doneCount} ${doneCount === 1 ? 'task' : 'tasks'}.`
+          : 'Everything is complete.'
+        : null
+    );
+    const badgeModifier = isDone ? ' compact-indicator__corner-badge--done' : '';
 
     return `
       <section
         class="compact-indicator compact-indicator--${viewModel.attentionState}"
         aria-label="${escapeHtml(statusLabel)}"
       >
-        <span class="compact-indicator__corner-badge" aria-hidden="true"></span>
+        <span class="compact-indicator__corner-badge${badgeModifier}" aria-hidden="true"></span>
         <div
           class="compact-indicator__main"
           data-action="show-compact-message"
@@ -644,10 +661,10 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
         >
           ${compactMarkMarkup(false)}
           <span class="compact-indicator__content">
-            <span class="compact-indicator__eyebrow">Needs your input</span>
-            <span class="compact-indicator__title">${escapeHtml(feedbackTitle)}</span>
-            ${compactHintMessage
-              ? `<span class="compact-indicator__hint" role="status">${escapeHtml(compactHintMessage)}</span>`
+            <span class="compact-indicator__eyebrow">${escapeHtml(eyebrow)}</span>
+            <span class="compact-indicator__title">${escapeHtml(title)}</span>
+            ${hint
+              ? `<span class="compact-indicator__hint" role="status">${escapeHtml(hint)}</span>`
               : ''}
           </span>
         </div>
@@ -726,7 +743,11 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
 }
 
 function getCompactSize(snapshot: OverlaySnapshot): { width: number; height: number } {
-  if (snapshot.attention_state === 'needs_feedback' || shouldShowWorkingDetail(snapshot)) {
+  if (
+    snapshot.attention_state === 'needs_feedback'
+    || snapshot.attention_state === 'all_tasks_done'
+    || shouldShowWorkingDetail(snapshot)
+  ) {
     return getCompactAttentionPreset();
   }
 
@@ -1316,6 +1337,11 @@ async function loadSnapshot(): Promise<void> {
   lastSnapshotText = snapshotText;
   const previousSnapshot = latestSnapshot;
   latestSnapshot = JSON.parse(snapshotText) as OverlaySnapshot;
+  const attentionSoundKind = getAttentionSoundKind(previousSnapshot, latestSnapshot);
+
+  if (attentionSoundKind) {
+    void playAttentionSound(attentionSoundKind);
+  }
 
   if (latestSnapshot.attention_state !== 'normal' || !latestSnapshot.active_task) {
     compactWorkingExpanded = false;
@@ -1374,6 +1400,14 @@ async function setOverlaySize(width: number, height: number): Promise<void> {
     await appWindow.setSize(new LogicalSize(width, height));
   } catch (error) {
     console.error('window size fallback failed', error);
+  }
+}
+
+async function playAttentionSound(kind: string): Promise<void> {
+  try {
+    await invoke('play_overlay_alert_sound', { kind });
+  } catch (error) {
+    console.error('play_overlay_alert_sound failed', error);
   }
 }
 

@@ -226,7 +226,7 @@ p {
   flex: none;
 }
 
-.compact-indicator:not(.compact-indicator--needs_feedback) .compact-indicator__core {
+.compact-indicator:not(.compact-indicator--needs_feedback):not(.compact-indicator--all_tasks_done) .compact-indicator__core {
   width: 24px;
   height: 24px;
   border-radius: 999px;
@@ -261,11 +261,11 @@ p {
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.16));
 }
 
-.compact-indicator:not(.compact-indicator--needs_feedback) .compact-indicator__mark {
+.compact-indicator:not(.compact-indicator--needs_feedback):not(.compact-indicator--all_tasks_done) .compact-indicator__mark {
   width: 21px;
 }
 
-.compact-indicator:not(.compact-indicator--needs_feedback) .compact-indicator__badge {
+.compact-indicator:not(.compact-indicator--needs_feedback):not(.compact-indicator--all_tasks_done) .compact-indicator__badge {
   top: 1px;
   right: -1px;
   width: 9px;
@@ -385,7 +385,8 @@ p {
   animation: nudge-warm 2.8s ease-in-out infinite;
 }
 
-.compact-indicator--needs_feedback {
+.compact-indicator--needs_feedback,
+.compact-indicator--all_tasks_done {
   min-width: 100%;
   min-height: 100%;
   padding: 0;
@@ -393,9 +394,17 @@ p {
   justify-content: flex-start;
   gap: 0;
   cursor: default;
+}
+
+.compact-indicator--needs_feedback {
   border-color: rgba(255, 124, 32, 0.14);
   background: linear-gradient(180deg, rgba(34, 25, 20, 0.92), rgba(24, 18, 15, 0.86));
   box-shadow: 0 18px 34px rgba(6, 8, 12, 0.2);
+}
+
+.compact-indicator--needs_feedback::before,
+.compact-indicator--all_tasks_done::before {
+  inset: 1px;
 }
 
 .compact-indicator--needs_feedback::before {
@@ -403,7 +412,18 @@ p {
   background: linear-gradient(180deg, rgba(255, 172, 104, 0.08), transparent 46%);
 }
 
-.compact-indicator--needs_feedback .compact-indicator__main {
+.compact-indicator--all_tasks_done {
+  border-color: rgba(111, 221, 176, 0.16);
+  background: linear-gradient(180deg, rgba(17, 31, 24, 0.92), rgba(13, 21, 18, 0.88));
+  box-shadow: 0 18px 34px rgba(6, 8, 12, 0.18);
+}
+
+.compact-indicator--all_tasks_done::before {
+  background: linear-gradient(180deg, rgba(111, 221, 176, 0.08), transparent 48%);
+}
+
+.compact-indicator--needs_feedback .compact-indicator__main,
+.compact-indicator--all_tasks_done .compact-indicator__main {
   display: flex;
   align-items: center;
   width: 100%;
@@ -411,7 +431,8 @@ p {
   padding: 14px 62px 14px 14px;
 }
 
-.compact-indicator--needs_feedback .compact-indicator__content {
+.compact-indicator--needs_feedback .compact-indicator__content,
+.compact-indicator--all_tasks_done .compact-indicator__content {
   display: grid;
   gap: 4px;
   align-items: center;
@@ -419,7 +440,8 @@ p {
   animation: reveal-attention-copy 220ms ease-out 1;
 }
 
-.compact-indicator--needs_feedback .compact-indicator__core {
+.compact-indicator--needs_feedback .compact-indicator__core,
+.compact-indicator--all_tasks_done .compact-indicator__core {
   width: 34px;
   height: 34px;
   border-radius: 10px;
@@ -429,8 +451,17 @@ p {
   margin-right: 12px;
 }
 
-.compact-indicator--needs_feedback .compact-indicator__mark {
+.compact-indicator--needs_feedback .compact-indicator__mark,
+.compact-indicator--all_tasks_done .compact-indicator__mark {
   width: 22px;
+}
+
+.compact-indicator--all_tasks_done .compact-indicator__eyebrow {
+  color: rgba(205, 247, 224, 0.86);
+}
+
+.compact-indicator--all_tasks_done .compact-indicator__hint {
+  color: rgba(210, 232, 219, 0.76);
 }
 
 .compact-indicator__corner-badge {
@@ -453,6 +484,17 @@ p {
   height: 4px;
   border-radius: 999px;
   background: #ff9a4b;
+}
+
+.compact-indicator__corner-badge--done {
+  border-color: rgba(111, 221, 176, 0.22);
+  background: rgba(111, 221, 176, 0.16);
+  box-shadow: 0 4px 12px rgba(111, 221, 176, 0.12);
+  animation: breathe-neutral 3.2s ease-in-out infinite;
+}
+
+.compact-indicator__corner-badge--done::before {
+  background: var(--emerald);
 }
 
 .compact-indicator__board-button {

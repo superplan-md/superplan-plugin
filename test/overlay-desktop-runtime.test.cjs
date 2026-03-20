@@ -170,6 +170,80 @@ test('renderable snapshot helper still shows actionable backlog and needs-feedba
   );
 });
 
+test('attention sound helper returns fresh needs-feedback events once', async () => {
+  const { getAttentionSoundKind } = await loadRuntimeHelpersModule();
+
+  const previousSnapshot = {
+    workspace_path: '/tmp/workspace',
+    session_id: 'workspace:/tmp/workspace',
+    updated_at: '2026-03-20T00:00:00.000Z',
+    active_task: null,
+    board: {
+      in_progress: [],
+      backlog: [],
+      done: [],
+      blocked: [],
+      needs_feedback: [],
+    },
+    attention_state: 'normal',
+    events: [],
+  };
+
+  const nextSnapshot = {
+    ...previousSnapshot,
+    updated_at: '2026-03-20T00:00:10.000Z',
+    attention_state: 'needs_feedback',
+    board: {
+      ...previousSnapshot.board,
+      needs_feedback: [{ task_id: 'T-500', title: 'Approve overlay card', status: 'needs_feedback' }],
+    },
+    events: [{
+      id: 'needs_feedback:1',
+      kind: 'needs_feedback',
+      created_at: '2026-03-20T00:00:10.000Z',
+    }],
+  };
+
+  assert.equal(
+    getAttentionSoundKind(previousSnapshot, nextSnapshot, Date.parse('2026-03-20T00:00:12.000Z')),
+    'needs_feedback',
+  );
+
+  assert.equal(
+    getAttentionSoundKind(nextSnapshot, nextSnapshot, Date.parse('2026-03-20T00:00:12.000Z')),
+    null,
+  );
+});
+
+test('attention sound helper ignores stale all-tasks-done events', async () => {
+  const { getAttentionSoundKind } = await loadRuntimeHelpersModule();
+
+  const doneSnapshot = {
+    workspace_path: '/tmp/workspace',
+    session_id: 'workspace:/tmp/workspace',
+    updated_at: '2026-03-20T00:00:00.000Z',
+    active_task: null,
+    board: {
+      in_progress: [],
+      backlog: [],
+      done: [{ task_id: 'T-999', title: 'Finished task', status: 'done' }],
+      blocked: [],
+      needs_feedback: [],
+    },
+    attention_state: 'all_tasks_done',
+    events: [{
+      id: 'all_tasks_done:1',
+      kind: 'all_tasks_done',
+      created_at: '2026-03-20T00:00:00.000Z',
+    }],
+  };
+
+  assert.equal(
+    getAttentionSoundKind(null, doneSnapshot, Date.parse('2026-03-20T00:01:00.000Z')),
+    null,
+  );
+});
+
 test('tauri window availability guard returns false when the runtime getter throws', async () => {
   const { isTauriWindowAvailable } = await loadRuntimeHelpersModule();
 

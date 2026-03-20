@@ -449,6 +449,30 @@ fn set_overlay_size(
 }
 
 #[tauri::command]
+fn play_overlay_alert_sound(kind: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let sound_path = match kind.as_str() {
+            "needs_feedback" => "/System/Library/Sounds/Ping.aiff",
+            "all_tasks_done" => "/System/Library/Sounds/Glass.aiff",
+            _ => return Ok(()),
+        };
+
+        std::process::Command::new("/usr/bin/afplay")
+            .arg(sound_path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("failed to play overlay alert sound: {error}"))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = kind;
+        Ok(())
+    }
+}
+
+#[tauri::command]
 fn start_overlay_drag(app_handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -510,6 +534,7 @@ pub fn run() {
         persist_overlay_requested_action,
         set_overlay_visibility,
         set_overlay_size,
+        play_overlay_alert_sound,
         start_overlay_drag
     ]);
 

@@ -4,4 +4,9 @@ export function getEmptyRuntimeSnapshot(workspacePath?: string): PrototypeSnapsh
 export function getBrowserFallbackSnapshot(workspacePath?: string): PrototypeSnapshot;
 export function getSnapshotTaskProgress(snapshot: PrototypeSnapshot): { done: number; total: number; ratio: number };
 export function hasRenderableSnapshotContent(snapshot: PrototypeSnapshot | null, nowMs?: number): boolean;
+export function getAttentionSoundKind(
+  previousSnapshot: PrototypeSnapshot | null,
+  nextSnapshot: PrototypeSnapshot | null,
+  nowMs?: number,
+): string | null;
 export function isTauriWindowAvailable(getWindow: () => unknown): boolean;

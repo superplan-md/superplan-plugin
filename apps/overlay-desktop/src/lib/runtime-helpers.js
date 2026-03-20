@@ -1,4 +1,6 @@
 const DONE_ACK_WINDOW_MS = 5 * 60 * 1000;
+const ALERT_SOUND_WINDOW_MS = 15 * 1000;
+const ALERT_SOUND_EVENT_KINDS = new Set(['needs_feedback', 'all_tasks_done']);
 
 export function getEmptyRuntimeSnapshot(workspacePath = '') {
   return {
@@ -148,6 +150,33 @@ function getLatestDoneEventTimestamp(snapshot) {
   return parseTimestamp(snapshot.updated_at);
 }
 
+function getLatestAlertEvent(snapshot) {
+  if (!snapshot) {
+    return null;
+  }
+
+  let latestEvent = null;
+  let latestTimestamp = null;
+
+  for (const event of snapshot.events ?? []) {
+    if (!ALERT_SOUND_EVENT_KINDS.has(event.kind)) {
+      continue;
+    }
+
+    const parsedTimestamp = parseTimestamp(event.created_at);
+    if (parsedTimestamp === null) {
+      continue;
+    }
+
+    if (latestTimestamp === null || parsedTimestamp >= latestTimestamp) {
+      latestEvent = event;
+      latestTimestamp = parsedTimestamp;
+    }
+  }
+
+  return latestEvent;
+}
+
 export function hasRenderableSnapshotContent(snapshot, nowMs = Date.now()) {
   if (!snapshot) {
     return false;
@@ -187,6 +216,29 @@ export function hasRenderableSnapshotContent(snapshot, nowMs = Date.now()) {
   }
 
   return false;
+}
+
+export function getAttentionSoundKind(previousSnapshot, nextSnapshot, nowMs = Date.now()) {
+  const latestAlertEvent = getLatestAlertEvent(nextSnapshot);
+  if (!latestAlertEvent) {
+    return null;
+  }
+
+  const latestAlertTimestamp = parseTimestamp(latestAlertEvent.created_at);
+  if (latestAlertTimestamp === null) {
+    return null;
+  }
+
+  if (nowMs - latestAlertTimestamp > ALERT_SOUND_WINDOW_MS) {
+    return null;
+  }
+
+  const previousAlertEvent = getLatestAlertEvent(previousSnapshot);
+  if (previousAlertEvent?.id === latestAlertEvent.id) {
+    return null;
+  }
+
+  return latestAlertEvent.kind;
 }
 
 export function isTauriWindowAvailable(getWindow) {
