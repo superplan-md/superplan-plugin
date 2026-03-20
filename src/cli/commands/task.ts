@@ -1,6 +1,15 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { parse } from './parse';
+import {
+  appendTaskEntryToIndex,
+  buildTaskContract,
+  getChangePaths,
+  getNextTaskId,
+  isValidChangeSlug,
+  pathExists,
+  type ScaffoldPriority,
+} from './scaffold';
 
 interface AcceptanceCriterion {
   text: string;
@@ -67,12 +76,14 @@ type TaskCommandResult =
   | { ok: true; data: { events: RuntimeEvent[] } }
   | { ok: true; data: { task_id: string; reset: true } }
   | { ok: true; data: { fixed: boolean; actions: TaskFixAction[] } }
+  | { ok: true; data: { task_id: string; change_id: string; path: string } }
   | TaskErrorResult;
 
 type TaskErrorResult = { ok: false; error: { code: string; message: string; retryable: boolean } };
 
 const TASK_SUBCOMMANDS = new Set([
   'show',
+  'new',
   'list',
   'current',
   'next',
@@ -208,14 +219,15 @@ function getTaskInvalidError(): TaskErrorResult {
 export function getTaskCommandHelpMessage(options: {
   subcommand?: string;
   requiresTaskId?: boolean;
+  requiredArgumentLabel?: string;
 }): string {
-  const { subcommand, requiresTaskId } = options;
+  const { subcommand, requiresTaskId, requiredArgumentLabel } = options;
 
   let intro = 'Superplan task command requires a subcommand.';
   if (subcommand && !requiresTaskId) {
     intro = `Unknown task subcommand: ${subcommand}`;
   } else if (subcommand && requiresTaskId) {
-    intro = `Task command "${subcommand}" requires a <task_id>.`;
+    intro = `Task command "${subcommand}" requires a ${requiredArgumentLabel ?? '<task_id>'}.`;
   }
 
   return [
@@ -226,6 +238,7 @@ export function getTaskCommandHelpMessage(options: {
     '  next                         Pick the next ready task',
     '  current                      Show the current in-progress task',
     '  show [task_id]               Show one task or all tasks',
+    '  new <change-slug>            Create a new task file in a change',
     '  start <task_id>              Start a specific ready task',
     '  complete <task_id>           Finish an in-progress task after the criteria are done',
     '  block <task_id> --reason     Pause a task because something external is blocking it',
@@ -242,6 +255,7 @@ export function getTaskCommandHelpMessage(options: {
     '  superplan task next',
     '  superplan task show T-001',
     '  superplan task --help',
+    '  superplan task new improve-task-authoring --title "Add task template"',
     '  superplan task start T-001',
     '  superplan task block T-001 --reason "Waiting on review"',
   ].join('\n');
@@ -250,6 +264,7 @@ export function getTaskCommandHelpMessage(options: {
 function getInvalidTaskCommandError(options: {
   subcommand?: string;
   requiresTaskId?: boolean;
+  requiredArgumentLabel?: string;
 }): TaskErrorResult {
   return {
     ok: false,
@@ -259,6 +274,18 @@ function getInvalidTaskCommandError(options: {
       retryable: true,
     },
   };
+}
+
+function parsePriority(rawPriority: string | undefined): ScaffoldPriority | null {
+  if (rawPriority === undefined) {
+    return 'medium';
+  }
+
+  if (rawPriority === 'high' || rawPriority === 'medium' || rawPriority === 'low') {
+    return rawPriority;
+  }
+
+  return null;
 }
 
 function getInvariantError(runtimeState: RuntimeState): TaskErrorResult | undefined {
@@ -1116,6 +1143,76 @@ async function resetTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
+async function createTask(changeSlug: string, title?: string, rawPriority?: string): Promise<TaskCommandResult> {
+  if (!isValidChangeSlug(changeSlug)) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_CHANGE_SLUG',
+        message: 'Change slug must use lowercase letters, numbers, and hyphens',
+        retryable: false,
+      },
+    };
+  }
+
+  const priority = parsePriority(rawPriority);
+  if (!priority) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_PRIORITY',
+        message: 'Priority must be one of: high, medium, low',
+        retryable: false,
+      },
+    };
+  }
+
+  const changePaths = getChangePaths(changeSlug);
+  if (!await pathExists(changePaths.changesRoot)) {
+    return {
+      ok: false,
+      error: {
+        code: 'INIT_REQUIRED',
+        message: 'Run superplan init before creating a task',
+        retryable: true,
+      },
+    };
+  }
+
+  if (!await pathExists(changePaths.changeRoot)) {
+    return {
+      ok: false,
+      error: {
+        code: 'CHANGE_NOT_FOUND',
+        message: 'Change not found',
+        retryable: false,
+      },
+    };
+  }
+
+  await fs.mkdir(changePaths.tasksDir, { recursive: true });
+
+  const taskId = await getNextTaskId(changePaths.tasksDir);
+  const taskPath = path.join(changePaths.tasksDir, `${taskId}.md`);
+  const summary = title?.trim() || 'Describe the task.';
+
+  await fs.writeFile(taskPath, buildTaskContract({
+    taskId,
+    title,
+    priority,
+  }), 'utf-8');
+  await appendTaskEntryToIndex(changePaths.tasksIndexPath, changeSlug, taskId, summary);
+
+  return {
+    ok: true,
+    data: {
+      task_id: taskId,
+      change_id: changeSlug,
+      path: path.relative(process.cwd(), taskPath) || taskPath,
+    },
+  };
+}
+
 function getOptionValue(args: string[], optionName: string): string | undefined {
   const optionIndex = args.indexOf(optionName);
   if (optionIndex === -1) {
@@ -1140,7 +1237,7 @@ function getPositionalArgs(args: string[]): string[] {
       continue;
     }
 
-    if (arg === '--reason' || arg === '--message') {
+    if (arg === '--reason' || arg === '--message' || arg === '--title' || arg === '--priority') {
       index += 1;
       continue;
     }
@@ -1157,6 +1254,8 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
   const taskId = positionalArgs[1];
   const reason = getOptionValue(args, '--reason');
   const message = getOptionValue(args, '--message');
+  const title = getOptionValue(args, '--title');
+  const priority = getOptionValue(args, '--priority');
 
   if (!subcommand || !TASK_SUBCOMMANDS.has(subcommand)) {
     return getInvalidTaskCommandError({ subcommand });
@@ -1180,6 +1279,18 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
 
   if (subcommand === 'show') {
     return showTask(taskId);
+  }
+
+  if (subcommand === 'new') {
+    if (!taskId) {
+      return getInvalidTaskCommandError({
+        subcommand,
+        requiresTaskId: true,
+        requiredArgumentLabel: '<change-slug>',
+      });
+    }
+
+    return createTask(taskId, title, priority);
   }
 
   if (subcommand === 'events') {

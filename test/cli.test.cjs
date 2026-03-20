@@ -23,6 +23,7 @@ test('cli without a command shows the main Superplan command list', async () => 
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Commands:/);
+  assert.match(result.stdout, /change\s+Change scaffolding operations/);
   assert.match(result.stdout, /setup\s+Setup Superplan on this machine or in this repo/);
   assert.match(result.stdout, /doctor\s+Validate setup/);
   assert.match(result.stdout, /parse\s+Parse superplan artifacts/);
@@ -74,11 +75,20 @@ test('task --help explains task subcommands explicitly', async () => {
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Task commands:/);
+  assert.match(result.stdout, /new <change-slug>\s+Create a new task file in a change/);
   assert.match(result.stdout, /next\s+Pick the next ready task/);
   assert.match(result.stdout, /block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run/);
   assert.doesNotMatch(result.stdout, /\bwhy-next\b/);
   assert.doesNotMatch(result.stdout, /\bwhy <task_id>\b/);
+});
+
+test('change --help explains change scaffolding commands', async () => {
+  const result = await runCli(['change', '--help']);
+
+  assert.equal(result.code, 0);
+  assert.match(result.stdout, /Change commands:/);
+  assert.match(result.stdout, /new <slug>\s+Create a new change skeleton/);
 });
 
 test('diagnostic task commands still work even when hidden from help', async () => {

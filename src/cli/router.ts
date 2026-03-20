@@ -1,4 +1,5 @@
 import { setup } from './commands/setup';
+import { change } from './commands/change';
 import { doctor } from './commands/doctor';
 import { parse } from './commands/parse';
 import { init } from './commands/init';
@@ -47,6 +48,7 @@ function normalizeCliResult(result: CommandResult) {
 }
 
 export const router: Record<string, CommandHandler> = {
+  change: async (args) => change(args),
   init: async (_args, options) => init(options),
   setup: async (_args, options) => setup(options),
   remove: async (_args, options) => remove(options),

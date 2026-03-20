@@ -1,15 +1,29 @@
 # Superplan CLI
 
-Plan work in markdown. Run it with a runtime.
+Turn normal planning into an executable local workflow.
 
-Superplan is a lightweight task execution CLI for repositories that want durable task contracts, agent-friendly JSON output, and a simple runtime loop without a heavyweight project system.
+Superplan is a lightweight planning and execution CLI for repositories that want durable task contracts, agent-friendly JSON output, and a simple runtime loop without a heavyweight project system.
 
-It is built for workflows where:
+It is built for teams and coding agents that want planning to stay:
 
-- tasks live in versioned markdown
-- readiness is computed from task contracts plus runtime state
-- humans and coding agents use the same command surface
-- the repo stays inspectable without a database or web app
+- local and inspectable
+- resumable after interruptions
+- shared between humans and agents
+- structured enough to pick the right next task without a separate web app
+
+## Normal Planning Vs Superplan
+
+Normal planning in a repo usually means some mix of chat history, scratch notes, TODO comments, and memory. That works until work gets interrupted, handed off, or split across dependencies.
+
+Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
+
+| Normal planning | Superplan planning |
+| --- | --- |
+| Notes and plans drift across chats and files | Task contracts live under `.superplan/changes/` |
+| The next step is often guessed manually | `superplan run --json` picks or continues the next task |
+| Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
+| Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
+| Planning structure is often handwritten | `superplan change new` and `superplan task new` scaffold the common path |
 
 ## Why Superplan
 
@@ -112,14 +126,28 @@ That creates the repo-local Superplan scaffold:
   config.toml
 ```
 
+#### 5. Create your first change and task
+
+```bash
+superplan change new improve-task-authoring
+superplan task new improve-task-authoring --title "Add authoring scaffold"
+```
+
 ## Core Workflow
 
-The intended execution loop is:
+The intended runtime loop is:
 
 ```bash
 superplan status --json
 superplan run --json
 superplan task show <task_id> --json
+```
+
+When you are shaping new work instead of executing existing work, start with:
+
+```bash
+superplan change new <change-slug>
+superplan task new <change-slug> --title "Describe the first task"
 ```
 
 Then continue with whichever runtime command matches the situation:
@@ -139,6 +167,7 @@ Current top-level commands:
 
 | Command | What it does |
 | --- | --- |
+| `change` | Create and inspect change-level scaffolding |
 | `init` | Initialize Superplan in the current repo |
 | `setup` | Install Superplan config and bundled skills |
 | `remove` | Remove a Superplan installation |
@@ -153,14 +182,22 @@ Task-specific help is available via:
 
 ```bash
 superplan task --help
+superplan change --help
 ```
 
 ## Task Contracts
 
-Superplan currently uses markdown task files stored under:
+Superplan uses markdown task files stored under:
 
 ```text
 .superplan/changes/<change-slug>/tasks/T-xxx.md
+```
+
+You can scaffold the common path instead of writing everything by hand:
+
+```bash
+superplan change new improve-task-authoring
+superplan task new improve-task-authoring --title "Add change scaffolding"
 ```
 
 Each task contract is expected to include:
@@ -247,6 +284,7 @@ superplan parse --json
 
 - The main CLI help shows the top-level Superplan commands.
 - `superplan task --help` is intentionally narrower and emphasizes the core task loop.
+- `superplan change new` and `superplan task new` create the canonical authoring structure under `.superplan/changes/`.
 - The current system is CLI-first and markdown-first.
 
 ## License

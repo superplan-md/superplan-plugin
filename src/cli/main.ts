@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { routeCommand, router } from './router';
+import { getChangeCommandHelpMessage } from './commands/change';
 import { getTaskCommandHelpMessage } from './commands/task';
 
 const { version } = require('../../package.json') as { version: string };
@@ -31,6 +32,7 @@ Usage:
   superplan <command>
 
 Commands:
+  change      Change scaffolding operations
   init        Initialize Superplan in this repo
   setup       Setup Superplan on this machine or in this repo
   remove      Remove Superplan installation
@@ -73,6 +75,22 @@ async function main() {
 
   if (command === 'task' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getTaskCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'change' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getChangeCommandHelpMessage({});
     if (json || quiet) {
       printJsonResult({
         ok: true,

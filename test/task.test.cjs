@@ -192,7 +192,7 @@ Lifecycle task
   ]);
 });
 
-test('task complete succeeds only for fully satisfied acceptance criteria', async () => {
+test('task complete keeps show and status aligned in the normal serialized flow', async () => {
   const sandbox = await makeSandbox('superplan-task-complete-');
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-300.md'), `---
@@ -229,6 +229,14 @@ Complete me
 
   const showPayload = parseCliJson(await runCli(['task', 'show', 'T-300', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(showPayload.data.task.status, 'done');
+
+  const statusPayload = parseCliJson(await runCli(['status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.deepEqual(statusPayload.data, {
+    active: null,
+    ready: [],
+    blocked: [],
+    needs_feedback: [],
+  });
 });
 
 test('task fix repairs runtime conflicts and doctor deep reports the remaining structural issues', async () => {
