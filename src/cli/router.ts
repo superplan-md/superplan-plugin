@@ -6,8 +6,9 @@ import { init } from './commands/init';
 import { task } from './commands/task';
 import { purge, remove } from './commands/remove';
 import { run } from './commands/run';
-import { server } from './commands/server';
+import { sync } from './commands/sync';
 import { status } from './commands/status';
+import { update } from './commands/update';
 
 type CommandOptions = {
   json: boolean;
@@ -56,9 +57,10 @@ export const router: Record<string, CommandHandler> = {
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
   run: async () => run(),
-  server: async (args, options) => server(args, options),
+  sync: async () => sync(),
   status: async () => status(),
   task: async (args) => task(args),
+  update: async (_args, options) => update(options),
 };
 
 export async function routeCommand(args: string[]) {

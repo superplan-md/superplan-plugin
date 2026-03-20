@@ -16,7 +16,7 @@ set -eu
 # - SUPERPLAN_INSTALL_PREFIX: custom npm global prefix for the install
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/cli.git}"
-SUPERPLAN_REF="${SUPERPLAN_REF:-main}"
+SUPERPLAN_REF="${SUPERPLAN_REF:-dev}"
 SUPERPLAN_SOURCE_DIR="${SUPERPLAN_SOURCE_DIR:-}"
 SUPERPLAN_INSTALL_PREFIX="${SUPERPLAN_INSTALL_PREFIX:-}"
 
@@ -101,6 +101,49 @@ fi
 if [ ! -x "$INSTALL_BIN_DIR/superplan" ]; then
   fail "superplan binary was not installed to $INSTALL_BIN_DIR"
 fi
+
+INSTALL_STATE_DIR="${HOME}/.config/superplan"
+INSTALL_STATE_PATH="$INSTALL_STATE_DIR/install.json"
+INSTALL_METHOD="remote_repo"
+
+if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
+  INSTALL_METHOD="local_source"
+fi
+
+mkdir -p "$INSTALL_STATE_DIR"
+node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" <<'EOF'
+const fs = require('node:fs');
+
+const [
+  installStatePath,
+  installMethod,
+  repoUrl,
+  ref,
+  requestedPrefix,
+  installPrefix,
+  installBinDir,
+  sourceDir,
+] = process.argv.slice(2);
+
+const metadata = {
+  install_method: installMethod,
+  repo_url: repoUrl,
+  ref,
+  install_prefix: installPrefix,
+  install_bin: installBinDir,
+  installed_at: new Date().toISOString(),
+};
+
+if (requestedPrefix) {
+  metadata.requested_install_prefix = requestedPrefix;
+}
+
+if (sourceDir) {
+  metadata.source_dir = sourceDir;
+}
+
+fs.writeFileSync(installStatePath, JSON.stringify(metadata, null, 2));
+EOF
 
 say "Installed Superplan to $INSTALL_BIN_DIR/superplan"
 say "Run: superplan --version"

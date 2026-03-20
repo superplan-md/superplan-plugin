@@ -18,6 +18,8 @@ The current documented top-level command surface is:
 - `change`
 - `init`
 - `setup`
+- `sync`
+- `update`
 - `remove`
 - `purge`
 - `doctor`
@@ -37,6 +39,7 @@ Supported install paths in the current repo are:
 Important install note:
 
 - `scripts/install.sh` now defaults `SUPERPLAN_REF` to `dev`, which matches the current tracked branch for this repository.
+- `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
 
 ## Project Structure
@@ -46,11 +49,12 @@ Important install note:
 - `src/cli/commands/change.ts`: Creates new change scaffolding under `.superplan/changes/<slug>/`.
 - `src/cli/commands/init.ts`: Creates repo-local `.superplan/` scaffolding, including `.superplan/config.toml`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`.
 - `src/cli/commands/setup.ts`: Installs Superplan config and bundled skills for supported agent environments. Supports global, local, both, and skip flows.
+- `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Local removal now treats `.superplan/changes/` as part of repo-local Superplan state.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
 - `src/cli/commands/scaffold.ts`: Shared helpers for generating canonical change and task artifacts.
-- `src/cli/commands/server.ts`: Internal or experimental dummy HTTP server code that still exists in the repo, but is not part of the current public documentation surface.
+- `src/cli/commands/sync.ts`: Re-parses task contracts, repairs safe runtime drift, and returns a refreshed repo-state summary.
 - `src/cli/commands/task.ts`: Implements task inspection, scaffolding, selection, readiness explanation, runtime transitions, and deterministic runtime repair.
 - `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop.
 - `src/cli/commands/status.ts`: Returns active, ready, blocked, and feedback-needed task summaries.
@@ -111,6 +115,10 @@ The primary authoring loop is:
 - `superplan change new <change-slug>`
 - `superplan task new <change-slug> --title "..."`
 
+The repo-refresh loop is:
+
+- `superplan sync --json`
+
 Important runtime commands:
 
 - `superplan status --json`
@@ -127,10 +135,12 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes.
 
 - The public product story is centered on planning, task pickup, resumption, and handoff rather than side experiments.
 - `change` and `task new` are the primary authoring helpers for new tracked work.
+- `sync` refreshes Superplan's view of the current repo, while `update` refreshes the installed CLI itself.
+- `update` is intended for normal installed copies of the CLI; local source checkouts should still be updated from the checkout and reinstalled explicitly.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.
 - `why` and `why-next` still exist as commands, but they are treated as diagnostic tools rather than default workflow steps.
 - The main CLI help should describe the full top-level Superplan command list.
-- The public docs currently exclude `server` from the surfaced command list even though internal or experimental server code still exists in the repo.
+- Experimental side surfaces should be removed rather than kept half-public or half-internal when they do not strengthen the core planning workflow.
 
 ## Testing And Development
 

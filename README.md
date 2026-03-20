@@ -82,6 +82,20 @@ Then verify the CLI is available:
 superplan --version
 ```
 
+To update a normal installed copy later:
+
+```bash
+superplan update
+```
+
+For local source installs, update from the checkout and reinstall explicitly.
+
+If the repo's task files or runtime state changed and you want Superplan to refresh its view of the project:
+
+```bash
+superplan sync --json
+```
+
 ### Run from source without a global install
 
 #### 1. Install dependencies
@@ -153,6 +167,7 @@ superplan task new <change-slug> --title "Describe the first task"
 Then continue with whichever runtime command matches the situation:
 
 ```bash
+superplan sync --json
 superplan task block <task_id> --reason "..."
 superplan task request-feedback <task_id> --message "..."
 superplan task fix --json
@@ -170,6 +185,8 @@ Current top-level commands:
 | `change` | Create and inspect change-level scaffolding |
 | `init` | Initialize Superplan in the current repo |
 | `setup` | Install Superplan config and bundled skills |
+| `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
+| `update` | Update the installed Superplan CLI |
 | `remove` | Remove a Superplan installation |
 | `purge` | Remove Superplan state more aggressively |
 | `doctor` | Validate setup and installation health |
@@ -285,6 +302,8 @@ superplan parse --json
 - The main CLI help shows the top-level Superplan commands.
 - `superplan task --help` is intentionally narrower and emphasizes the core task loop.
 - `superplan change new` and `superplan task new` create the canonical authoring structure under `.superplan/changes/`.
+- `superplan sync` refreshes Superplan's view of the current repo.
+- `superplan update` is intended for normal installed copies of the CLI, not local source checkouts.
 - The current system is CLI-first and markdown-first.
 
 ## License

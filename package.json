@@ -4,6 +4,7 @@
   "description": "Superplan CLI",
   "files": [
     "dist",
+    "scripts/install.sh",
     "README.md",
     "package.json"
   ],

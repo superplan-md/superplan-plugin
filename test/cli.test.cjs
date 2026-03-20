@@ -25,11 +25,13 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /Commands:/);
   assert.match(result.stdout, /change\s+Change scaffolding operations/);
   assert.match(result.stdout, /setup\s+Setup Superplan on this machine or in this repo/);
+  assert.match(result.stdout, /sync\s+Refresh Superplan's view of this repo/);
+  assert.match(result.stdout, /update\s+Update the installed Superplan CLI/);
   assert.match(result.stdout, /doctor\s+Validate setup/);
   assert.match(result.stdout, /parse\s+Parse superplan artifacts/);
-  assert.match(result.stdout, /server\s+Start the local dummy server/);
   assert.match(result.stdout, /purge\s+Purge Superplan installation/);
   assert.match(result.stdout, /status\s+Show current task status summary/);
+  assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
   assert.doesNotMatch(result.stdout, /popup\s+Open or refocus the current task popup/);
 });
 
@@ -55,6 +57,21 @@ test('cli returns UNKNOWN_COMMAND for invalid command', async () => {
     error: {
       code: 'UNKNOWN_COMMAND',
       message: 'Unknown command: unknown-command',
+      retryable: false,
+    },
+  });
+});
+
+test('server is no longer part of the surfaced command set', async () => {
+  const result = await runCli(['server', '--json']);
+  const payload = parseCliJson(result);
+
+  assert.equal(result.code, 1);
+  assert.deepEqual(payload, {
+    ok: false,
+    error: {
+      code: 'UNKNOWN_COMMAND',
+      message: 'Unknown command: server',
       retryable: false,
     },
   });

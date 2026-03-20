@@ -55,6 +55,16 @@ test('install script installs superplan from a local source snapshot into a cust
   assert.equal(installResult.code, 0, installResult.stderr || installResult.stdout);
   assert.match(installResult.stdout, /Installed Superplan to/);
 
+  const installMetadata = JSON.parse(await fs.readFile(
+    path.join(sandbox.home, '.config', 'superplan', 'install.json'),
+    'utf-8',
+  ));
+  assert.equal(installMetadata.install_method, 'local_source');
+  assert.equal(installMetadata.install_prefix, prefixDir);
+  assert.equal(installMetadata.install_bin, path.join(prefixDir, 'bin'));
+  assert.equal(installMetadata.source_dir, REPO_ROOT);
+  assert.equal(installMetadata.ref, 'dev');
+
   const cliResult = await runCommand(path.join(prefixDir, 'bin', 'superplan'), ['--version', '--json'], {
     cwd: sandbox.cwd,
     env: {
