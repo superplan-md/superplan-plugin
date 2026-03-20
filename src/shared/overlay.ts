@@ -18,6 +18,9 @@ export interface OverlayTaskSummary {
   title: string;
   description?: string;
   status: OverlayTaskStatus;
+  completed_acceptance_criteria?: number;
+  total_acceptance_criteria?: number;
+  progress_percent?: number;
   started_at?: string;
   completed_at?: string;
   updated_at?: string;

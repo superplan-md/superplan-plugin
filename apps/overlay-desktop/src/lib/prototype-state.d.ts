@@ -5,6 +5,9 @@ export interface PrototypeTask {
   title: string;
   description?: string;
   status: string;
+  completed_acceptance_criteria?: number;
+  total_acceptance_criteria?: number;
+  progress_percent?: number;
   started_at?: string;
   completed_at?: string;
   updated_at?: string;

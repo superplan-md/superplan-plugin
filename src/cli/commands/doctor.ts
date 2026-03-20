@@ -2,6 +2,8 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { parse } from './parse';
+import { inspectOverlayCompanionInstall } from '../overlay-companion';
+import { readOverlayPreferences } from '../overlay-preferences';
 
 interface DoctorIssue {
   code: string;
@@ -265,6 +267,8 @@ export async function doctor(args: string[] = []) {
   const configPath = path.join(homeDir, '.config', 'superplan', 'config.toml');
   const skillsPath = path.join(homeDir, '.config', 'superplan', 'skills');
   const deep = args.includes('--deep');
+  const overlayPreferences = await readOverlayPreferences(cwd);
+  const overlayCompanion = await inspectOverlayCompanionInstall();
 
   if (!await pathExists(configPath)) {
     issues.push({
@@ -295,6 +299,20 @@ export async function doctor(args: string[] = []) {
         fix: 'Run superplan setup in this repo',
       });
     }
+  }
+
+  if (overlayPreferences.effective_enabled && !overlayCompanion.launchable) {
+    issues.push({
+      code: 'OVERLAY_COMPANION_UNAVAILABLE',
+      message: overlayCompanion.message || 'Overlay companion is enabled but no launchable install was found.',
+      fix: 'Reinstall Superplan with the bundled overlay companion',
+    });
+  } else if (overlayCompanion.configured && !overlayCompanion.launchable) {
+    issues.push({
+      code: 'OVERLAY_COMPANION_BROKEN',
+      message: overlayCompanion.message || 'Overlay companion install is present but not launchable.',
+      fix: 'Reinstall Superplan to restore the overlay companion',
+    });
   }
 
   if (deep) {

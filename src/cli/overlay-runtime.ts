@@ -20,6 +20,9 @@ export interface OverlayTaskSource {
   description: string;
   status: string;
   priority: TaskPriority;
+  completed_acceptance_criteria?: number;
+  total_acceptance_criteria?: number;
+  progress_percent?: number;
   started_at?: string;
   completed_at?: string;
   updated_at?: string;
@@ -116,6 +119,15 @@ function toOverlayTaskSummary(task: OverlayTaskSource): OverlayTaskSummary {
     title: getTaskTitle(task),
     ...(description ? { description } : {}),
     status: getOverlayTaskStatus(task.status),
+    ...(typeof task.completed_acceptance_criteria === 'number'
+      ? { completed_acceptance_criteria: task.completed_acceptance_criteria }
+      : {}),
+    ...(typeof task.total_acceptance_criteria === 'number'
+      ? { total_acceptance_criteria: task.total_acceptance_criteria }
+      : {}),
+    ...(typeof task.progress_percent === 'number'
+      ? { progress_percent: task.progress_percent }
+      : {}),
     ...(task.started_at ? { started_at: task.started_at } : {}),
     ...(task.completed_at ? { completed_at: task.completed_at } : {}),
     ...(task.updated_at ? { updated_at: task.updated_at } : {}),

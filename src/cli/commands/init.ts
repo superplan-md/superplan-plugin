@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { confirm } from '@inquirer/prompts';
 import { setup, type SetupResult } from './setup';
+import { writeOverlayPreference } from '../overlay-preferences';
 
 export type InitResult =
   | { ok: true; data: { root: string } }
@@ -101,6 +102,11 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     await fs.mkdir(runtimeDir, { recursive: true });
     await fs.mkdir(changesDir, { recursive: true });
     await fs.writeFile(configPath, 'version = "0.1"\n', 'utf-8');
+
+    if (!options.quiet) {
+      const enableOverlay = await confirm({ message: 'Enable desktop overlay in this repository?' });
+      await writeOverlayPreference(enableOverlay, { scope: 'local', cwd });
+    }
 
     return {
       ok: true,

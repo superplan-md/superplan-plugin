@@ -25,8 +25,9 @@
         "transparent": true,
         "alwaysOnTop": true,
         "skipTaskbar": true,
+        "visible": false,
         "visibleOnAllWorkspaces": true,
-        "shadow": true,
+        "shadow": false,
         "x": 18,
         "y": 18
       }

@@ -14,11 +14,21 @@ set -eu
 # - SUPERPLAN_REF: git ref to check out after clone
 # - SUPERPLAN_SOURCE_DIR: local source directory to copy instead of cloning
 # - SUPERPLAN_INSTALL_PREFIX: custom npm global prefix for the install
+# - SUPERPLAN_OVERLAY_SOURCE_PATH: prebuilt overlay bundle or executable to install
+# - SUPERPLAN_OVERLAY_INSTALL_DIR: install directory for the overlay bundle or executable
+# - SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH: relative executable path inside the installed overlay bundle
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/cli.git}"
 SUPERPLAN_REF="${SUPERPLAN_REF:-dev}"
 SUPERPLAN_SOURCE_DIR="${SUPERPLAN_SOURCE_DIR:-}"
 SUPERPLAN_INSTALL_PREFIX="${SUPERPLAN_INSTALL_PREFIX:-}"
+SUPERPLAN_OVERLAY_SOURCE_PATH="${SUPERPLAN_OVERLAY_SOURCE_PATH:-}"
+SUPERPLAN_OVERLAY_INSTALL_DIR="${SUPERPLAN_OVERLAY_INSTALL_DIR:-${HOME}/.local/share/superplan/overlay}"
+SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH="${SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH:-}"
+
+OVERLAY_INSTALL_METHOD=""
+OVERLAY_INSTALL_PATH=""
+OVERLAY_EXECUTABLE_PATH=""
 
 say() {
   printf '%s\n' "$*"
@@ -47,6 +57,48 @@ cleanup() {
 }
 
 trap cleanup EXIT INT TERM
+
+resolve_overlay_executable_path() {
+  install_path="$1"
+
+  if [ -n "$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH" ] && [ -f "$install_path/$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH" ]; then
+    printf '%s\n' "$install_path/$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH"
+    return 0
+  fi
+
+  if [ -d "$install_path/Contents/MacOS" ]; then
+    find "$install_path/Contents/MacOS" -type f | sort | head -n 1
+    return 0
+  fi
+
+  if [ -f "$install_path" ]; then
+    printf '%s\n' "$install_path"
+    return 0
+  fi
+
+  find "$install_path" -maxdepth 2 -type f -perm -u+x 2>/dev/null | sort | head -n 1
+}
+
+install_overlay_companion() {
+  if [ -z "$SUPERPLAN_OVERLAY_SOURCE_PATH" ]; then
+    return 0
+  fi
+
+  [ -e "$SUPERPLAN_OVERLAY_SOURCE_PATH" ] || fail "SUPERPLAN_OVERLAY_SOURCE_PATH does not exist: $SUPERPLAN_OVERLAY_SOURCE_PATH"
+
+  mkdir -p "$SUPERPLAN_OVERLAY_INSTALL_DIR"
+
+  overlay_name="$(basename "$SUPERPLAN_OVERLAY_SOURCE_PATH")"
+  OVERLAY_INSTALL_PATH="$SUPERPLAN_OVERLAY_INSTALL_DIR/$overlay_name"
+
+  rm -rf "$OVERLAY_INSTALL_PATH"
+  cp -R "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$OVERLAY_INSTALL_PATH"
+
+  OVERLAY_EXECUTABLE_PATH="$(resolve_overlay_executable_path "$OVERLAY_INSTALL_PATH")"
+  [ -n "$OVERLAY_EXECUTABLE_PATH" ] || fail "failed to resolve overlay executable inside $OVERLAY_INSTALL_PATH"
+
+  OVERLAY_INSTALL_METHOD="copied_prebuilt"
+}
 
 if [ -n "$SUPERPLAN_INSTALL_PREFIX" ]; then
   export npm_config_prefix="$SUPERPLAN_INSTALL_PREFIX"
@@ -98,6 +150,11 @@ else
   npm install --global "$SOURCE_WORKTREE/$PACKAGE_TGZ" >/dev/null
 fi
 
+if [ -n "$SUPERPLAN_OVERLAY_SOURCE_PATH" ]; then
+  say "Installing Superplan overlay companion"
+  install_overlay_companion
+fi
+
 if [ ! -x "$INSTALL_BIN_DIR/superplan" ]; then
   fail "superplan binary was not installed to $INSTALL_BIN_DIR"
 fi
@@ -111,7 +168,7 @@ if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
 fi
 
 mkdir -p "$INSTALL_STATE_DIR"
-node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" <<'EOF'
+node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH" <<'EOF'
 const fs = require('node:fs');
 
 const [
@@ -123,6 +180,12 @@ const [
   installPrefix,
   installBinDir,
   sourceDir,
+  overlaySourcePath,
+  overlayInstallDir,
+  overlayInstallMethod,
+  overlayInstallPath,
+  overlayExecutablePath,
+  overlayExecutableRelativePath,
 ] = process.argv.slice(2);
 
 const metadata = {
@@ -142,8 +205,23 @@ if (sourceDir) {
   metadata.source_dir = sourceDir;
 }
 
+if (overlayInstallMethod && overlayInstallPath) {
+  metadata.overlay = {
+    install_method: overlayInstallMethod,
+    source_path: overlaySourcePath || undefined,
+    install_dir: overlayInstallDir || undefined,
+    install_path: overlayInstallPath,
+    executable_path: overlayExecutablePath || undefined,
+    executable_relative_path: overlayExecutableRelativePath || undefined,
+    installed_at: new Date().toISOString(),
+  };
+}
+
 fs.writeFileSync(installStatePath, JSON.stringify(metadata, null, 2));
 EOF
 
 say "Installed Superplan to $INSTALL_BIN_DIR/superplan"
+if [ -n "$OVERLAY_INSTALL_PATH" ]; then
+  say "Installed Superplan overlay to $OVERLAY_INSTALL_PATH"
+fi
 say "Run: superplan --version"

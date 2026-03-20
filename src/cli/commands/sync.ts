@@ -1,6 +1,7 @@
 import { parse } from './parse';
 import { status } from './status';
 import { task } from './task';
+import { refreshOverlaySnapshot } from '../overlay-runtime';
 
 interface SyncDiagnostic {
   code: string;
@@ -70,6 +71,24 @@ export async function sync(deps: Partial<SyncDeps> = {}): Promise<SyncResult> {
   if (!statusResult.ok) {
     return statusResult;
   }
+
+  const showTasksResult = await runtimeDeps.taskFn(['show']);
+  if (!showTasksResult.ok) {
+    return showTasksResult;
+  }
+
+  if (!('tasks' in showTasksResult.data)) {
+    return {
+      ok: false,
+      error: {
+        code: 'SYNC_FAILED',
+        message: 'Unexpected task listing result while refreshing overlay snapshot',
+        retryable: false,
+      },
+    };
+  }
+
+  await refreshOverlaySnapshot(showTasksResult.data.tasks);
 
   return {
     ok: true,

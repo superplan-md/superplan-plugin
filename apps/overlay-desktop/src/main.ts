@@ -13,13 +13,21 @@ import {
   type PrototypeMode,
   type PrototypeViewModel,
 } from './lib/prototype-state.js';
-import { getBrowserFallbackSnapshot, isTauriWindowAvailable } from './lib/runtime-helpers.js';
+import {
+  getBrowserFallbackSnapshot,
+  getEmptyRuntimeSnapshot,
+  getSnapshotTaskProgress,
+  isTauriWindowAvailable,
+} from './lib/runtime-helpers.js';
 
 type OverlayTask = {
   task_id: string;
   title: string;
   description?: string;
   status: string;
+  completed_acceptance_criteria?: number;
+  total_acceptance_criteria?: number;
+  progress_percent?: number;
   started_at?: string;
   completed_at?: string;
   updated_at?: string;
@@ -50,6 +58,8 @@ type OverlayControlState = {
   visible: boolean;
 };
 
+type ResizeDirection = 'North' | 'South' | 'East' | 'West' | 'NorthEast' | 'NorthWest' | 'SouthEast' | 'SouthWest';
+
 const POLL_INTERVAL_MS = 900;
 const LIVE_TIME_REFRESH_MS = 1000;
 const COMPACT_ADVANCE_DURATION_MS = 1600;
@@ -57,20 +67,35 @@ const COMPACT_HINT_DURATION_MS = 2400;
 const COMPACT_DRAG_CLICK_SUPPRESSION_MS = 3000;
 const COMPACT_COMING_SOON_MESSAGE = 'Click coming soon. Go to your coding agent';
 const DRAG_THRESHOLD_PX = 4;
+const EXPANDED_MIN_WIDTH = 980;
+const EXPANDED_MIN_HEIGHT = 620;
 const OVERLAY_POSITION_STORAGE_KEY = 'superplan.overlay.position';
+const COMPACT_WORKING_CARD_STORAGE_KEY = 'superplan.overlay.compactWorkingCardExpanded';
 const superplanMarkUrl = new URL('./assets/superplan-mark.png', import.meta.url).href;
+const RESIZE_DIRECTIONS = new Set<ResizeDirection>([
+  'North',
+  'South',
+  'East',
+  'West',
+  'NorthEast',
+  'NorthWest',
+  'SouthEast',
+  'SouthWest',
+] as const);
 
 let mode: PrototypeMode = 'compact';
 let latestSnapshot: OverlaySnapshot | null = null;
+let latestControlState: OverlayControlState | null = null;
 let lastSnapshotText = '';
 let lastControlText: string | null = null;
+let lastAppliedVisibility: boolean | null = null;
 let pollTimer: number | undefined;
 let liveTimeTimer: number | undefined;
 let compactAdvanceTimer: number | undefined;
 let compactAdvanceActive = false;
 let compactHintMessage: string | null = null;
 let compactHintTimer: number | undefined;
-let compactWorkingExpanded = false;
+let compactWorkingExpanded = true;
 let overlayMovedUnlisten: (() => void) | null = null;
 let pendingOverlayDragSurface: HTMLElement | null = null;
 let pendingOverlayDragStartX = 0;
@@ -129,6 +154,27 @@ function writeStoredOverlayPosition(x: number, y: number): void {
   }
 }
 
+function readStoredCompactWorkingExpanded(): boolean {
+  try {
+    const stored = window.localStorage.getItem(COMPACT_WORKING_CARD_STORAGE_KEY);
+    if (stored === null) {
+      return true;
+    }
+
+    return stored !== 'false';
+  } catch {
+    return true;
+  }
+}
+
+function writeStoredCompactWorkingExpanded(expanded: boolean): void {
+  try {
+    window.localStorage.setItem(COMPACT_WORKING_CARD_STORAGE_KEY, expanded ? 'true' : 'false');
+  } catch {
+    // Ignore storage failures; session state still updates.
+  }
+}
+
 async function restoreOverlayPosition(): Promise<void> {
   const appWindow = getAppWindow();
   const stored = readStoredOverlayPosition();
@@ -151,6 +197,10 @@ async function installOverlayPositionPersistence(): Promise<void> {
   }
 
   overlayMovedUnlisten = await appWindow.onMoved(({ payload }) => {
+    if (mode !== 'compact') {
+      return;
+    }
+
     writeStoredOverlayPosition(payload.x, payload.y);
   });
 }
@@ -173,12 +223,40 @@ function getCompactStatusLabel(viewModel: PrototypeViewModel): string {
   return `Working on ${viewModel.primaryTask.title}.`;
 }
 
+function hasRenderableSnapshotContent(snapshot: OverlaySnapshot | null): boolean {
+  if (!snapshot) {
+    return false;
+  }
+
+  if (snapshot.active_task) {
+    return true;
+  }
+
+  if (snapshot.attention_state !== 'normal') {
+    return true;
+  }
+
+  if (snapshot.events.length > 0) {
+    return true;
+  }
+
+  return Object.values(snapshot.board).some(column => column.length > 0);
+}
+
 function getCompactBoardLabel(viewModel: PrototypeViewModel): string {
   if (viewModel.primaryTask) {
     return `Open full board for ${viewModel.primaryTask.title}.`;
   }
 
   return 'Open full board.';
+}
+
+function getExpandedSurfaceLabel(snapshot: OverlaySnapshot, viewModel: PrototypeViewModel): string {
+  if (snapshot.attention_state === 'normal' && snapshot.active_task) {
+    return 'Active';
+  }
+
+  return viewModel.surfaceLabel;
 }
 
 function compactMarkMarkup(showBadge = true): string {
@@ -204,21 +282,21 @@ function compactBoardIconMarkup(): string {
 function compactCollapseIconMarkup(): string {
   return `
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M5 12.5 10 7.5 15 12.5"></path>
+      <path d="M5 10h10"></path>
     </svg>
   `;
 }
 
-function boardRefreshIconMarkup(): string {
+function compactCloseIconMarkup(): string {
   return `
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M16 10a6 6 0 1 1-1.76-4.24"></path>
-      <path d="M16 4v4h-4"></path>
+      <path d="M6.5 6.5 13.5 13.5"></path>
+      <path d="M13.5 6.5 6.5 13.5"></path>
     </svg>
   `;
 }
 
-function boardCollapseIconMarkup(): string {
+function boardShrinkIconMarkup(): string {
   return `
     <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M8 3H3v5"></path>
@@ -232,10 +310,38 @@ function boardCollapseIconMarkup(): string {
 function boardBrandMarkup(): string {
   return `
     <span class="board-heading__mark" aria-hidden="true">
-      <span class="board-heading__mark-core">
-        <img class="board-heading__mark-image" src="${superplanMarkUrl}" alt="" />
-      </span>
+      <img class="board-heading__mark-image" src="${superplanMarkUrl}" alt="" />
     </span>
+  `;
+}
+
+function boardTrafficLightsMarkup(): string {
+  return `
+    <div class="board-traffic-lights" role="toolbar" aria-label="Window controls">
+      <button
+        class="traffic-light traffic-light--close"
+        data-action="hide-overlay"
+        aria-label="Close overlay"
+        title="Close overlay"
+        type="button"
+      >
+        <span class="traffic-light__glyph" aria-hidden="true">×</span>
+      </button>
+      <button
+        class="traffic-light traffic-light--minimize"
+        data-action="toggle-mode"
+        aria-label="Collapse to compact overlay"
+        title="Collapse to compact overlay"
+        type="button"
+      ></button>
+      <button
+        class="traffic-light traffic-light--disabled"
+        aria-label="Zoom unavailable"
+        title="Zoom unavailable"
+        type="button"
+        disabled
+      ></button>
+    </div>
   `;
 }
 
@@ -352,10 +458,6 @@ function refreshLiveTimeLabels(): void {
   });
 }
 
-function getBoardStatLabel(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
 function boardStatMarkup(label: string, value: string, tone: 'neutral' | 'live' | 'done' | 'warning' = 'neutral'): string {
   return `
     <div class="board-stat board-stat--${tone}">
@@ -395,45 +497,34 @@ function getTaskNote(task: OverlayTask): string | null {
 }
 
 function taskCueMarkup(task: OverlayTask): string {
-  if (task.status === 'in_progress') {
+  if (typeof task.completed_acceptance_criteria === 'number'
+    && typeof task.total_acceptance_criteria === 'number'
+    && task.total_acceptance_criteria > 0) {
     return `
-      <span class="task-cue task-cue--live">
-        <span class="live-indicator" aria-hidden="true"></span>
-        Live
+      <span class="task-progress-pill">
+        ${escapeHtml(`${task.completed_acceptance_criteria}/${task.total_acceptance_criteria}`)}
       </span>
     `;
-  }
-
-  if (task.status === 'needs_feedback') {
-    return '<span class="task-cue task-cue--needs_feedback">You</span>';
-  }
-
-  if (task.status === 'blocked') {
-    return '<span class="task-cue task-cue--blocked">Blocked</span>';
-  }
-
-  if (task.status === 'done') {
-    return '<span class="task-cue task-cue--done">Done</span>';
   }
 
   return '';
 }
 
 function taskLeadMarkup(task: OverlayTask): string {
-  if (task.status === 'in_progress' && task.started_at) {
-    return liveLabelMarkup('elapsed', task.started_at, 'Working for ');
-  }
-
-  if (task.status === 'done') {
-    return escapeHtml(formatCompletionDurationLabel(task) ?? 'Finished');
-  }
-
   if (task.status === 'needs_feedback') {
-    return 'Waiting on you';
+    return 'Needs feedback';
   }
 
   if (task.status === 'blocked') {
     return 'Blocked';
+  }
+
+  if (task.status === 'done') {
+    return 'Done';
+  }
+
+  if (task.status === 'in_progress') {
+    return 'In progress';
   }
 
   return 'Queued';
@@ -444,11 +535,24 @@ function taskMetaMarkup(task: OverlayTask): string {
 
   if (task.status === 'in_progress' && task.started_at) {
     const startedClock = formatClockLabel(task.started_at);
-    detailMarkup = startedClock ? `<span class="task-card__detail">Started ${escapeHtml(startedClock)}</span>` : '';
+    const detailParts = [
+      liveLabelMarkup('elapsed', task.started_at, 'Live '),
+      startedClock ? `Started ${escapeHtml(startedClock)}` : '',
+    ].filter(Boolean);
+
+    detailMarkup = detailParts.length > 0
+      ? `<span class="task-card__detail">${detailParts.join('<span class="task-card__detail-separator" aria-hidden="true"></span>')}</span>`
+      : '';
   } else if (task.status === 'done' && task.completed_at) {
+    const completionLabel = formatCompletionDurationLabel(task);
+    const detailParts = [
+      liveLabelMarkup('relative', task.completed_at, 'Finished '),
+      completionLabel ? escapeHtml(completionLabel) : '',
+    ].filter(Boolean);
+
     detailMarkup = `
       <span class="task-card__detail task-card__detail--relative">
-        ${liveLabelMarkup('relative', task.completed_at, 'Finished ')}
+        ${detailParts.join('<span class="task-card__detail-separator" aria-hidden="true"></span>')}
       </span>
     `;
   } else if ((task.status === 'needs_feedback' || task.status === 'blocked') && task.updated_at) {
@@ -461,7 +565,10 @@ function taskMetaMarkup(task: OverlayTask): string {
 
   return `
     <div class="task-card__meta">
-      <span class="task-card__id">${escapeHtml(task.task_id)}</span>
+      <div class="task-card__meta-left">
+        <span class="task-card__id">${escapeHtml(task.task_id)}</span>
+        ${taskCueMarkup(task)}
+      </div>
       ${detailMarkup}
     </div>
   `;
@@ -488,22 +595,22 @@ function getEmptyColumnLabel(columnKey: PrototypeViewModel['visibleColumns'][num
 }
 
 function getCompactTaskProgress(snapshot: OverlaySnapshot): { done: number; total: number; ratio: number } {
-  const total = snapshot.board.in_progress.length
-    + snapshot.board.backlog.length
-    + snapshot.board.done.length
-    + snapshot.board.blocked.length
-    + snapshot.board.needs_feedback.length;
-  const done = snapshot.board.done.length;
-
-  return {
-    done,
-    total,
-    ratio: total === 0 ? 0 : done / total,
-  };
+  return getSnapshotTaskProgress(snapshot);
 }
 
 function getCompactTaskDescription(task: OverlayTask | null): string {
   return task?.description?.trim() || 'Active task in progress.';
+}
+
+function compactWorkingDescriptionMarkup(task: OverlayTask | null): string {
+  if (task?.started_at) {
+    const liveMarkup = liveLabelMarkup('elapsed', task.started_at, 'Working for ');
+    if (liveMarkup) {
+      return liveMarkup;
+    }
+  }
+
+  return escapeHtml(getCompactTaskDescription(task));
 }
 
 function compactProgressMarkup(snapshot: OverlaySnapshot): string {
@@ -586,27 +693,39 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
           <span class="compact-indicator__content compact-indicator__content--working">
             <span class="compact-indicator__eyebrow">Working now</span>
             <span class="compact-indicator__title">${escapeHtml(viewModel.primaryTask.title)}</span>
-            <span class="compact-indicator__description">${escapeHtml(getCompactTaskDescription(viewModel.primaryTask))}</span>
+            <span class="compact-indicator__description compact-indicator__description--live">${compactWorkingDescriptionMarkup(viewModel.primaryTask)}</span>
           </span>
-          ${compactProgressMarkup(latestSnapshot)}
-        </div>
-        <div class="compact-indicator__utility">
-          <button
-            class="compact-indicator__utility-button"
-            data-action="collapse-working-card"
-            aria-label="Collapse working details"
-            type="button"
-          >
-            ${compactCollapseIconMarkup()}
-          </button>
-          <button
-            class="compact-indicator__utility-button"
-            data-action="open-board"
-            aria-label="${escapeHtml(boardLabel)}"
-            type="button"
-          >
-            ${compactBoardIconMarkup()}
-          </button>
+          <div class="compact-indicator__working-actions">
+            ${compactProgressMarkup(latestSnapshot)}
+            <div class="compact-indicator__working-rail">
+              <div class="compact-indicator__working-utility">
+                <button
+                  class="compact-indicator__utility-button compact-indicator__utility-button--close"
+                  data-action="hide-overlay"
+                  aria-label="Hide overlay"
+                  type="button"
+                >
+                  ${compactCloseIconMarkup()}
+                </button>
+                <button
+                  class="compact-indicator__utility-button compact-indicator__utility-button--collapse"
+                  data-action="collapse-working-card"
+                  aria-label="Minimize to compact chip"
+                  type="button"
+                >
+                  ${compactCollapseIconMarkup()}
+                </button>
+              </div>
+              <button
+                class="compact-indicator__board-button compact-indicator__board-button--working"
+                data-action="open-board"
+                aria-label="${escapeHtml(boardLabel)}"
+                type="button"
+              >
+                ${compactBoardIconMarkup()}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
     `;
@@ -819,6 +938,7 @@ function bindOverlayDragSurface(surface: HTMLElement): void {
 
 async function setCompactWorkingExpanded(expanded: boolean): Promise<void> {
   compactWorkingExpanded = expanded;
+  writeStoredCompactWorkingExpanded(expanded);
 
   if (!latestSnapshot || mode !== 'compact') {
     return;
@@ -829,6 +949,76 @@ async function setCompactWorkingExpanded(expanded: boolean): Promise<void> {
   await waitForNextFrame();
   await setOverlaySize(preset.width, preset.height);
   render(latestSnapshot);
+}
+
+async function hideOverlayFromUi(): Promise<void> {
+  try {
+    await invoke('persist_overlay_requested_action', {
+      requestedAction: 'hide',
+      updatedAt: new Date().toISOString(),
+      visible: false,
+    });
+  } catch (error) {
+    console.error('persist_overlay_requested_action failed', error);
+  }
+
+  latestControlState = {
+    workspace_path: latestSnapshot?.workspace_path ?? '',
+    requested_action: 'hide',
+    updated_at: new Date().toISOString(),
+    visible: false,
+  };
+  lastAppliedVisibility = false;
+  await applyVisibility(false);
+}
+
+async function enterExpandedWindowMode(): Promise<void> {
+  const appWindow = getAppWindow();
+  if (!appWindow) {
+    return;
+  }
+
+  try {
+    await appWindow.setResizable(true);
+    await appWindow.setMaxSize(null);
+    await appWindow.setMinSize(new LogicalSize(EXPANDED_MIN_WIDTH, EXPANDED_MIN_HEIGHT));
+  } catch (error) {
+    console.error('set expanded window mode failed', error);
+  }
+}
+
+async function enterCompactWindowMode(): Promise<void> {
+  const appWindow = getAppWindow();
+  if (!appWindow) {
+    return;
+  }
+
+  try {
+    if (latestSnapshot) {
+      const preset = getCompactSize(latestSnapshot);
+      await appWindow.setMinSize(new LogicalSize(preset.width, preset.height));
+      await appWindow.setMaxSize(new LogicalSize(preset.width, preset.height));
+    }
+    await appWindow.setResizable(false);
+  } catch (error) {
+    console.error('set compact window mode failed', error);
+  }
+}
+
+function bindExpandedWindowDragSurface(surface: HTMLElement): void {
+  surface.addEventListener('mousedown', event => {
+    if (mode !== 'expanded' || event.button !== 0) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('button, a, input, textarea, select')) {
+      return;
+    }
+
+    event.preventDefault();
+    void startOverlayDrag();
+  });
 }
 
 function activeStripMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewModel): string {
@@ -846,13 +1036,13 @@ function activeStripMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewMo
       ? boardStatLiveMarkup('Live', 'elapsed', activeTask.started_at, '', 'live')
       : '',
     viewModel.columnCounts.backlog > 0
-      ? boardStatMarkup('Queued', getBoardStatLabel(viewModel.columnCounts.backlog, 'task'), 'neutral')
+      ? boardStatMarkup('Queued', String(viewModel.columnCounts.backlog), 'neutral')
       : '',
     viewModel.columnCounts.done > 0
-      ? boardStatMarkup('Done', getBoardStatLabel(viewModel.columnCounts.done, 'task'), 'done')
+      ? boardStatMarkup('Done', String(viewModel.columnCounts.done), 'done')
       : '',
     viewModel.columnCounts.blocked > 0
-      ? boardStatMarkup('Blocked', getBoardStatLabel(viewModel.columnCounts.blocked, 'task'), 'warning')
+      ? boardStatMarkup('Blocked', String(viewModel.columnCounts.blocked), 'warning')
       : '',
   ].filter(Boolean).join('');
 
@@ -860,9 +1050,11 @@ function activeStripMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewMo
     return `
       <section class="active-strip active-strip--empty">
         <div class="active-strip__main">
-          <p class="eyebrow">No task in progress</p>
+          <div class="active-strip__status">
+            <span>Idle</span>
+          </div>
           <div class="active-strip__copy">
-            <h2>Waiting for the next snapshot</h2>
+            <h2>No active task</h2>
           </div>
         </div>
         <div class="active-strip__stats">
@@ -899,32 +1091,54 @@ function activeStripMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewMo
 function columnMarkup(column: PrototypeViewModel['visibleColumns'][number]): string {
   return `
     <section class="board-column board-column--${column.tone}" data-column="${column.key}">
-      <header>
-        <div>
-          <p class="eyebrow">${column.count === 1 ? '1 task' : `${column.count} tasks`}</p>
-          <h3>${column.title}</h3>
+      <header class="board-column__header">
+        <div class="board-column__heading">
+          <h3>${escapeHtml(column.title)}</h3>
         </div>
-        <span>${column.count}</span>
+        <span class="board-count-pill">${escapeHtml(String(column.count))}</span>
       </header>
-      <div class="board-stack">
+      <div class="board-column__rule" aria-hidden="true"></div>
+      <div class="board-stack ${column.items.length === 0 ? 'board-stack--empty' : ''}">
         ${column.items.length === 0
-          ? `<p class="board-empty">${getEmptyColumnLabel(column.key)}</p>`
+          ? `
+            <div class="board-empty">
+              <p>${escapeHtml(getEmptyColumnLabel(column.key))}</p>
+            </div>
+          `
           : column.items.map(item => `
               <article class="task-card task-card--${item.status}">
-                <div class="task-card__header">
-                  <div class="task-card__headline">
-                    <p class="task-card__eyebrow">${taskLeadMarkup(item)}</p>
-                    <strong>${escapeHtml(item.title)}</strong>
-                  </div>
-                  ${taskCueMarkup(item)}
+                <div class="task-card__topline">
+                  <p class="task-card__eyebrow">${taskLeadMarkup(item)}</p>
                 </div>
-                ${taskMetaMarkup(item)}
+                <strong>${escapeHtml(item.title)}</strong>
                 ${getTaskNote(item) ? `<p class="task-card__note">${escapeHtml(getTaskNote(item)!)}</p>` : ''}
+                ${taskMetaMarkup(item)}
               </article>
             `).join('')}
       </div>
     </section>
   `;
+}
+
+function boardResizeZonesMarkup(): string {
+  const zones = [
+    ['North', 'board-resize-zone--north'],
+    ['South', 'board-resize-zone--south'],
+    ['East', 'board-resize-zone--east'],
+    ['West', 'board-resize-zone--west'],
+    ['NorthEast', 'board-resize-zone--north-east'],
+    ['NorthWest', 'board-resize-zone--north-west'],
+    ['SouthEast', 'board-resize-zone--south-east'],
+    ['SouthWest', 'board-resize-zone--south-west'],
+  ] as const;
+
+  return zones.map(([direction, className]) => `
+    <div class="board-resize-zone ${className}" data-resize-direction="${direction}" aria-hidden="true"></div>
+  `).join('');
+}
+
+function isResizeDirection(value: string): value is ResizeDirection {
+  return RESIZE_DIRECTIONS.has(value as ResizeDirection);
 }
 
 function render(snapshot: OverlaySnapshot): void {
@@ -947,8 +1161,9 @@ function render(snapshot: OverlaySnapshot): void {
     `
     : `
       <section class="board-surface">
-        <header class="board-topbar">
+        <header class="board-topbar" data-expanded-window-drag>
           <div class="board-heading">
+            ${boardTrafficLightsMarkup()}
             ${boardBrandMarkup()}
             <div class="board-heading__copy">
               <p class="eyebrow">Superplan board</p>
@@ -959,28 +1174,18 @@ function render(snapshot: OverlaySnapshot): void {
           <div class="board-topbar__actions">
             <div class="status-pill status-pill--${viewModel.attentionState}">
               <span class="status-pill__dot"></span>
-              ${escapeHtml(viewModel.surfaceLabel)}
+              ${escapeHtml(getExpandedSurfaceLabel(snapshot, viewModel))}
             </div>
-            <div class="board-window-controls" role="toolbar" aria-label="Board controls">
-              <button
-                class="icon-button icon-button--subtle"
-                data-action="refresh"
-                aria-label="Refresh board"
-                title="Refresh board"
-                type="button"
-              >
-                ${boardRefreshIconMarkup()}
-              </button>
-              <button
-                class="icon-button icon-button--solid"
-                data-action="toggle-mode"
-                aria-label="Collapse board to compact overlay"
-                title="Collapse board to compact overlay"
-                type="button"
-              >
-                ${boardCollapseIconMarkup()}
-              </button>
-            </div>
+            <button
+              class="ghost-button board-shrink-button"
+              data-action="toggle-mode"
+              aria-label="Shrink overlay"
+              title="Shrink overlay"
+              type="button"
+            >
+              ${boardShrinkIconMarkup()}
+              <span>Shrink</span>
+            </button>
           </div>
         </header>
 
@@ -990,12 +1195,15 @@ function render(snapshot: OverlaySnapshot): void {
           ${viewModel.visibleColumns.map(column => columnMarkup(column)).join('')}
         </section>
       </section>
+      ${boardResizeZonesMarkup()}
     `;
 
   refreshLiveTimeLabels();
 
-  root.querySelector('[data-action="toggle-mode"]')?.addEventListener('click', async () => {
-    await setMode(getNextMode(mode));
+  root.querySelectorAll<HTMLElement>('[data-action="toggle-mode"]').forEach(element => {
+    element.addEventListener('click', async () => {
+      await setMode(getNextMode(mode));
+    });
   });
 
   root.querySelector('[data-action="expand-working-card"]')?.addEventListener('click', async () => {
@@ -1005,6 +1213,13 @@ function render(snapshot: OverlaySnapshot): void {
   root.querySelector('[data-action="collapse-working-card"]')?.addEventListener('click', async (event) => {
     event.stopPropagation();
     await setCompactWorkingExpanded(false);
+  });
+
+  root.querySelectorAll<HTMLElement>('[data-action="hide-overlay"]').forEach(element => {
+    element.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      await hideOverlayFromUi();
+    });
   });
 
   root.querySelector('[data-action="open-board"]')?.addEventListener('click', async (event) => {
@@ -1018,11 +1233,33 @@ function render(snapshot: OverlaySnapshot): void {
     showCompactHint();
   });
 
-  root.querySelector('[data-action="refresh"]')?.addEventListener('click', async () => {
-    await loadSnapshot();
+  root.querySelectorAll<HTMLElement>('[data-action="refresh"]').forEach(element => {
+    element.addEventListener('click', async () => {
+      await loadSnapshot();
+    });
+  });
+
+  root.querySelectorAll<HTMLElement>('[data-resize-direction]').forEach(element => {
+    element.addEventListener('mousedown', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const appWindow = getAppWindow();
+      const direction = element.getAttribute('data-resize-direction');
+      if (!appWindow || mode !== 'expanded' || !direction || !isResizeDirection(direction)) {
+        return;
+      }
+
+      try {
+        await appWindow.startResizeDragging(direction);
+      } catch (error) {
+        console.error('board resize drag failed', error);
+      }
+    });
   });
 
   root.querySelectorAll<HTMLElement>('[data-overlay-drag]').forEach(bindOverlayDragSurface);
+  root.querySelectorAll<HTMLElement>('[data-expanded-window-drag]').forEach(bindExpandedWindowDragSurface);
 }
 
 function renderStartupError(error: unknown): void {
@@ -1044,13 +1281,35 @@ function renderStartupError(error: unknown): void {
 async function setMode(nextMode: PrototypeMode): Promise<void> {
   if (nextMode !== 'compact') {
     compactWorkingExpanded = false;
+  } else {
+    compactWorkingExpanded = readStoredCompactWorkingExpanded();
   }
 
   mode = nextMode;
   const preset = nextMode === 'compact' && latestSnapshot
     ? getCompactSize(latestSnapshot)
     : getWindowPreset(nextMode);
+
+  if (nextMode === 'expanded') {
+    await enterExpandedWindowMode();
+  } else {
+    await enterCompactWindowMode();
+  }
+
   await setOverlaySize(preset.width, preset.height);
+
+  if (nextMode === 'expanded') {
+    const appWindow = getAppWindow();
+    if (appWindow) {
+      try {
+        await appWindow.center();
+      } catch (error) {
+        console.error('center expanded window failed', error);
+      }
+    }
+  } else {
+    await restoreOverlayPosition();
+  }
 
   if (latestSnapshot) {
     render(latestSnapshot);
@@ -1059,9 +1318,13 @@ async function setMode(nextMode: PrototypeMode): Promise<void> {
 
 async function loadSnapshot(): Promise<void> {
   let snapshotText: string;
-  try {
-    snapshotText = await invoke<string>('load_overlay_snapshot');
-  } catch {
+  if (isTauriWindowAvailable(getCurrentWindow)) {
+    try {
+      snapshotText = await invoke<string>('load_overlay_snapshot');
+    } catch {
+      snapshotText = JSON.stringify(getEmptyRuntimeSnapshot());
+    }
+  } else {
     snapshotText = JSON.stringify(getBrowserFallbackSnapshot());
   }
 
@@ -1141,13 +1404,24 @@ async function loadControlState(): Promise<void> {
     controlText = null;
   }
 
-  if (!controlText || controlText === lastControlText) {
+  if (controlText === lastControlText) {
     return;
   }
 
   lastControlText = controlText;
-  const controlState = JSON.parse(controlText) as OverlayControlState;
-  await applyVisibility(controlState.visible);
+  latestControlState = controlText ? JSON.parse(controlText) as OverlayControlState : null;
+}
+
+async function syncDerivedVisibility(): Promise<void> {
+  const requestedVisibility = latestControlState?.visible ?? false;
+  const visible = requestedVisibility && hasRenderableSnapshotContent(latestSnapshot);
+
+  if (lastAppliedVisibility === visible) {
+    return;
+  }
+
+  lastAppliedVisibility = visible;
+  await applyVisibility(visible);
 }
 
 async function syncOverlayRuntime(): Promise<void> {
@@ -1155,6 +1429,7 @@ async function syncOverlayRuntime(): Promise<void> {
     loadSnapshot(),
     loadControlState(),
   ]);
+  await syncDerivedVisibility();
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -1168,6 +1443,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 window.addEventListener('DOMContentLoaded', async () => {
   try {
+    compactWorkingExpanded = readStoredCompactWorkingExpanded();
     await installOverlayPositionPersistence();
     await restoreOverlayPosition();
     await syncOverlayRuntime();

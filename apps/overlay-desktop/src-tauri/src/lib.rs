@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     env, fs,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use tauri::Manager;
@@ -16,11 +17,122 @@ fn overlay_runtime_file_path_for_workspace(workspace_root: &Path, file_name: &st
     workspace_root.join(".superplan/runtime").join(file_name)
 }
 
+fn overlay_runtime_dir_for_workspace(workspace_root: &Path) -> PathBuf {
+    workspace_root.join(".superplan/runtime")
+}
+
+#[derive(Default)]
+struct OverlayWorkspaceState {
+    workspace_root: Mutex<Option<PathBuf>>,
+}
+
+impl OverlayWorkspaceState {
+    fn get(&self) -> Option<PathBuf> {
+        self.workspace_root
+            .lock()
+            .expect("overlay workspace state mutex poisoned")
+            .clone()
+    }
+
+    fn set(&self, workspace_root: Option<PathBuf>) {
+        *self
+            .workspace_root
+            .lock()
+            .expect("overlay workspace state mutex poisoned") = workspace_root;
+    }
+}
+
+fn find_workspace_root(candidate: &Path) -> Option<PathBuf> {
+    candidate
+        .ancestors()
+        .find(|ancestor| ancestor.join(".superplan").is_dir())
+        .map(Path::to_path_buf)
+}
+
+fn normalize_workspace_override(candidate: PathBuf) -> Option<PathBuf> {
+    if candidate.as_os_str().is_empty() {
+        return None;
+    }
+
+    let absolute_candidate = if candidate.is_absolute() {
+        candidate
+    } else {
+        env::current_dir().ok()?.join(candidate)
+    };
+
+    Some(find_workspace_root(&absolute_candidate).unwrap_or(absolute_candidate))
+}
+
+fn parse_workspace_override_from_args(args: &[String]) -> Option<PathBuf> {
+    let mut index = 0;
+
+    while index < args.len() {
+        let arg = &args[index];
+
+        if let Some(value) = arg.strip_prefix("--workspace=") {
+            return normalize_workspace_override(PathBuf::from(value));
+        }
+
+        if arg == "--workspace" {
+            let value = args
+                .get(index + 1)
+                .filter(|next| !next.starts_with("--"))
+                .map(PathBuf::from)?;
+            return normalize_workspace_override(value);
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
+fn resolve_launch_workspace_override(args: &[String], cwd: Option<&Path>) -> Option<PathBuf> {
+    parse_workspace_override_from_args(args).or_else(|| cwd.and_then(find_workspace_root))
+}
+
+fn initialize_workspace_override(app: &tauri::App) {
+    let args = env::args().collect::<Vec<_>>();
+    let workspace_override = parse_workspace_override_from_args(&args).or_else(|| {
+        env::var_os("SUPERPLAN_OVERLAY_WORKSPACE")
+            .map(PathBuf::from)
+            .and_then(normalize_workspace_override)
+    });
+
+    app.state::<OverlayWorkspaceState>().set(workspace_override);
+}
+
+fn apply_secondary_launch(
+    app_handle: &tauri::AppHandle,
+    args: &[String],
+    cwd: Option<&Path>,
+) -> Result<(), String> {
+    if let Some(workspace_override) = resolve_launch_workspace_override(args, cwd) {
+        app_handle
+            .state::<OverlayWorkspaceState>()
+            .set(Some(workspace_override));
+    }
+
+    apply_overlay_visibility(app_handle, true)?;
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let window = app_handle
+            .get_webview_window("main")
+            .ok_or_else(|| "failed to access main overlay window".to_string())?;
+
+        window
+            .set_focus()
+            .map_err(|error| format!("failed to focus main overlay window: {error}"))?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
-fn load_overlay_snapshot() -> Result<String, String> {
-    let snapshot_path = resolve_overlay_snapshot_path()?
-    .ok_or_else(|| {
-        "failed to locate .superplan/runtime/overlay.json from SUPERPLAN_OVERLAY_WORKSPACE, current working directory, or app manifest ancestors".to_string()
+fn load_overlay_snapshot(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let snapshot_path = resolve_overlay_snapshot_path(&app_handle)?.ok_or_else(|| {
+        "failed to locate .superplan/runtime/overlay.json from explicit launch workspace, SUPERPLAN_OVERLAY_WORKSPACE, current working directory, or app manifest ancestors".to_string()
     })?;
 
     fs::read_to_string(&snapshot_path).map_err(|error| {
@@ -32,8 +144,8 @@ fn load_overlay_snapshot() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn load_overlay_control_state() -> Result<Option<String>, String> {
-    let control_path = match resolve_overlay_control_path()? {
+fn load_overlay_control_state(app_handle: tauri::AppHandle) -> Result<Option<String>, String> {
+    let control_path = match resolve_overlay_control_path(&app_handle)? {
         Some(path) => path,
         None => return Ok(None),
     };
@@ -109,17 +221,26 @@ fn resolve_overlay_control_path_from_sources(
     )
 }
 
-fn resolve_runtime_context() -> Result<(Option<PathBuf>, PathBuf, PathBuf), String> {
+fn resolve_runtime_context(
+    app_handle: &tauri::AppHandle,
+) -> Result<(Option<PathBuf>, PathBuf, PathBuf), String> {
     let current_dir = env::current_dir()
         .map_err(|error| format!("failed to determine current working directory: {error}"))?;
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_override = env::var_os("SUPERPLAN_OVERLAY_WORKSPACE").map(PathBuf::from);
+    let workspace_override = app_handle
+        .state::<OverlayWorkspaceState>()
+        .get()
+        .or_else(|| {
+            env::var_os("SUPERPLAN_OVERLAY_WORKSPACE")
+                .map(PathBuf::from)
+                .and_then(normalize_workspace_override)
+        });
 
     Ok((workspace_override, current_dir, manifest_dir))
 }
 
-fn resolve_overlay_snapshot_path() -> Result<Option<PathBuf>, String> {
-    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context()?;
+fn resolve_overlay_snapshot_path(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
+    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context(app_handle)?;
 
     Ok(resolve_overlay_snapshot_path_from_sources(
         workspace_override.as_deref(),
@@ -128,14 +249,22 @@ fn resolve_overlay_snapshot_path() -> Result<Option<PathBuf>, String> {
     ))
 }
 
-fn resolve_overlay_control_path() -> Result<Option<PathBuf>, String> {
-    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context()?;
+fn resolve_overlay_control_path(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
+    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context(app_handle)?;
 
     Ok(resolve_overlay_control_path_from_sources(
         workspace_override.as_deref(),
         current_dir.as_path(),
         manifest_dir.as_path(),
     ))
+}
+
+fn resolve_overlay_workspace_root(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
+    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context(app_handle)?;
+
+    Ok(workspace_override
+        .or_else(|| find_workspace_root(current_dir.as_path()))
+        .or_else(|| find_workspace_root(manifest_dir.as_path())))
 }
 
 #[cfg(target_os = "macos")]
@@ -176,7 +305,13 @@ fn configure_macos_overlay_panel(window: &tauri::WebviewWindow) -> tauri::Result
     panel.set_becomes_key_only_if_needed(true);
     panel.set_hides_on_deactivate(false);
     panel.set_works_when_modal(true);
-    panel.make_key_window();
+    window.with_webview(|webview| unsafe {
+        let native_window: &tauri_nspanel::objc2_app_kit::NSWindow = &*webview.ns_window().cast();
+        let background = tauri_nspanel::objc2_app_kit::NSColor::clearColor();
+        native_window.setOpaque(false);
+        native_window.setHasShadow(false);
+        native_window.setBackgroundColor(Some(&background));
+    })?;
 
     Ok(())
 }
@@ -201,7 +336,7 @@ fn apply_overlay_visibility(app_handle: &tauri::AppHandle, visible: bool) -> Res
             .map_err(|_| "failed to access main overlay panel".to_string())?;
 
         if visible {
-            panel.show_and_make_key();
+            panel.show();
         } else {
             panel.hide();
         }
@@ -234,6 +369,47 @@ fn set_overlay_visibility(app_handle: tauri::AppHandle, visible: bool) -> Result
     apply_overlay_visibility(&app_handle, visible)
 }
 
+#[tauri::command]
+fn persist_overlay_requested_action(
+    app_handle: tauri::AppHandle,
+    requested_action: String,
+    updated_at: String,
+    visible: bool,
+) -> Result<(), String> {
+    let requested_action = requested_action.trim().to_ascii_lowercase();
+    if requested_action != "ensure" && requested_action != "show" && requested_action != "hide" {
+        return Err(format!(
+            "invalid overlay requested_action {requested_action:?}; expected ensure, show, or hide"
+        ));
+    }
+
+    let workspace_root = resolve_overlay_workspace_root(&app_handle)?.ok_or_else(|| {
+        "failed to resolve overlay workspace root for control state persistence".to_string()
+    })?;
+    let runtime_dir = overlay_runtime_dir_for_workspace(workspace_root.as_path());
+    let control_path = runtime_dir.join("overlay-control.json");
+    let payload = format!(
+        "{{\n  \"workspace_path\": {:?},\n  \"requested_action\": {:?},\n  \"updated_at\": {:?},\n  \"visible\": {}\n}}\n",
+        workspace_root.display().to_string(),
+        requested_action,
+        updated_at,
+        visible,
+    );
+
+    fs::create_dir_all(&runtime_dir).map_err(|error| {
+        format!(
+            "failed to create overlay runtime directory at {}: {error}",
+            runtime_dir.display()
+        )
+    })?;
+    fs::write(&control_path, payload).map_err(|error| {
+        format!(
+            "failed to write overlay control state at {}: {error}",
+            control_path.display()
+        )
+    })
+}
+
 fn apply_overlay_size(
     app_handle: &tauri::AppHandle,
     width: f64,
@@ -246,7 +422,6 @@ fn apply_overlay_size(
             .map_err(|_| "failed to access main overlay panel".to_string())?;
 
         panel.set_content_size(width, height);
-        panel.make_key_window();
         return Ok(());
     }
 
@@ -327,19 +502,35 @@ fn start_overlay_drag(app_handle: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default().invoke_handler(tauri::generate_handler![
+    let mut builder = tauri::Builder::default()
+        .manage(OverlayWorkspaceState::default())
+        .invoke_handler(tauri::generate_handler![
         load_overlay_snapshot,
         load_overlay_control_state,
+        persist_overlay_requested_action,
         set_overlay_visibility,
         set_overlay_size,
         start_overlay_drag
     ]);
 
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+            let cwd = PathBuf::from(cwd);
+            let _ = apply_secondary_launch(app, &args, Some(cwd.as_path()));
+        }));
+    }
+
     #[cfg(target_os = "macos")]
-    let builder = builder.plugin(tauri_nspanel::init());
+    {
+        builder = builder.plugin(tauri_nspanel::init());
+    }
 
     builder
-        .setup(|app| Ok(configure_overlay_shell(app)?))
+        .setup(|app| {
+            initialize_workspace_override(app);
+            Ok(configure_overlay_shell(app)?)
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -367,6 +558,10 @@ mod tests {
 
     fn create_control_file(workspace_root: &Path) -> PathBuf {
         create_runtime_file(workspace_root, "overlay-control.json")
+    }
+
+    fn create_superplan_root(workspace_root: &Path) {
+        fs::create_dir_all(workspace_root.join(".superplan")).expect("create superplan root");
     }
 
     fn create_runtime_file(workspace_root: &Path, file_name: &str) -> PathBuf {
@@ -459,6 +654,50 @@ mod tests {
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(manifest_root);
+    }
+
+    #[test]
+    fn parse_workspace_override_supports_inline_and_positional_flag_values() {
+        let inline = super::parse_workspace_override_from_args(&[
+            "overlay".to_string(),
+            "--workspace=/tmp/inline-workspace".to_string(),
+        ]);
+        let positional = super::parse_workspace_override_from_args(&[
+            "overlay".to_string(),
+            "--workspace".to_string(),
+            "/tmp/flag-workspace".to_string(),
+        ]);
+
+        assert_eq!(inline, Some(PathBuf::from("/tmp/inline-workspace")));
+        assert_eq!(positional, Some(PathBuf::from("/tmp/flag-workspace")));
+    }
+
+    #[test]
+    fn resolve_launch_workspace_override_prefers_args_then_workspace_cwd() {
+        let explicit_root = unique_temp_path("launch-explicit");
+        let cwd_root = unique_temp_path("launch-cwd");
+        let cwd_child = cwd_root.join("apps/overlay-desktop");
+
+        create_superplan_root(&explicit_root);
+        create_superplan_root(&cwd_root);
+        fs::create_dir_all(&cwd_child).expect("create cwd child");
+
+        let explicit = super::resolve_launch_workspace_override(
+            &[
+                "overlay".to_string(),
+                "--workspace".to_string(),
+                explicit_root.display().to_string(),
+            ],
+            Some(cwd_child.as_path()),
+        );
+
+        let from_cwd = super::resolve_launch_workspace_override(&[], Some(cwd_child.as_path()));
+
+        assert_eq!(explicit.as_deref(), Some(explicit_root.as_path()));
+        assert_eq!(from_cwd.as_deref(), Some(cwd_root.as_path()));
+
+        let _ = fs::remove_dir_all(explicit_root);
+        let _ = fs::remove_dir_all(cwd_root);
     }
 
     #[cfg(target_os = "macos")]

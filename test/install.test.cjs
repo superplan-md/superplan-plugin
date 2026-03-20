@@ -78,3 +78,38 @@ test('install script installs superplan from a local source snapshot into a cust
   assert.equal(payload.ok, true);
   assert.equal(payload.data.version, '0.1.0');
 });
+
+test('install script records and installs a bundled overlay companion when one is provided', async () => {
+  const sandbox = await makeSandbox('superplan-install-overlay-');
+  const prefixDir = path.join(sandbox.root, 'prefix');
+  const overlaySourcePath = path.join(sandbox.root, 'overlay-bin');
+
+  await fs.mkdir(prefixDir, { recursive: true });
+  await fs.writeFile(overlaySourcePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+
+  const installResult = await runCommand('sh', [path.join(REPO_ROOT, 'scripts', 'install.sh')], {
+    cwd: sandbox.cwd,
+    env: {
+      ...process.env,
+      HOME: sandbox.home,
+      SUPERPLAN_SOURCE_DIR: REPO_ROOT,
+      SUPERPLAN_INSTALL_PREFIX: prefixDir,
+      SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath,
+    },
+  });
+
+  assert.equal(installResult.code, 0, installResult.stderr || installResult.stdout);
+  assert.match(installResult.stdout, /Installed Superplan overlay to/);
+
+  const installMetadata = JSON.parse(await fs.readFile(
+    path.join(sandbox.home, '.config', 'superplan', 'install.json'),
+    'utf-8',
+  ));
+  const expectedOverlayInstallPath = path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', path.basename(overlaySourcePath));
+
+  assert.equal(installMetadata.overlay.install_method, 'copied_prebuilt');
+  assert.equal(installMetadata.overlay.source_path, overlaySourcePath);
+  assert.equal(installMetadata.overlay.install_dir, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
+  assert.equal(installMetadata.overlay.install_path, expectedOverlayInstallPath);
+  assert.equal(installMetadata.overlay.executable_path, expectedOverlayInstallPath);
+});

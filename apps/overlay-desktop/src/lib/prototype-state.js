@@ -10,8 +10,8 @@ export const WINDOW_PRESETS = {
 };
 
 export const COMPACT_ATTENTION_PRESET = {
-  width: 312,
-  height: 72,
+  width: 384,
+  height: 86,
 };
 
 const COLUMN_DEFINITIONS = [

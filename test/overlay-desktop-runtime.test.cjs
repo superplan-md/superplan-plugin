@@ -31,6 +31,65 @@ test('browser fallback snapshot includes live and completed task timing cues', a
   assert.deepEqual(snapshot.events, []);
 });
 
+test('snapshot task progress prefers active-task checklist progress over board completion counts', async () => {
+  const { getSnapshotTaskProgress } = await loadRuntimeHelpersModule();
+
+  const progress = getSnapshotTaskProgress({
+    workspace_path: '/tmp/workspace',
+    session_id: 'workspace:/tmp/workspace',
+    updated_at: '2026-03-20T00:00:00.000Z',
+    active_task: {
+      task_id: 'T-100',
+      title: 'Show real task progress',
+      status: 'in_progress',
+      completed_acceptance_criteria: 2,
+      total_acceptance_criteria: 3,
+      progress_percent: 67,
+    },
+    board: {
+      in_progress: [{ task_id: 'T-100', title: 'Show real task progress', status: 'in_progress' }],
+      backlog: [{ task_id: 'T-101', title: 'Later', status: 'backlog' }],
+      done: [],
+      blocked: [],
+      needs_feedback: [],
+    },
+    attention_state: 'normal',
+    events: [],
+  });
+
+  assert.deepEqual(progress, {
+    done: 2,
+    total: 3,
+    ratio: 2 / 3,
+  });
+});
+
+test('snapshot task progress falls back to board completion counts when task checklist counts are absent', async () => {
+  const { getSnapshotTaskProgress } = await loadRuntimeHelpersModule();
+
+  const progress = getSnapshotTaskProgress({
+    workspace_path: '/tmp/workspace',
+    session_id: 'workspace:/tmp/workspace',
+    updated_at: '2026-03-20T00:00:00.000Z',
+    active_task: null,
+    board: {
+      in_progress: [{ task_id: 'T-100', title: 'Working', status: 'in_progress' }],
+      backlog: [{ task_id: 'T-101', title: 'Queued', status: 'backlog' }],
+      done: [{ task_id: 'T-099', title: 'Done', status: 'done' }],
+      blocked: [],
+      needs_feedback: [],
+    },
+    attention_state: 'normal',
+    events: [],
+  });
+
+  assert.deepEqual(progress, {
+    done: 1,
+    total: 3,
+    ratio: 1 / 3,
+  });
+});
+
 test('tauri window availability guard returns false when the runtime getter throws', async () => {
   const { isTauriWindowAvailable } = await loadRuntimeHelpersModule();
 

@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { confirm, select } from '@inquirer/prompts';
+import { readInstallMetadata } from '../install-metadata';
 
 interface AgentEnvironment {
   name: string;
@@ -158,6 +159,10 @@ async function detectAgents(baseDir: string, scope: AgentScope, managedSkillName
 }
 
 async function removePath(targetPath: string, removedPaths: string[]): Promise<void> {
+  if (!targetPath) {
+    return;
+  }
+
   if (!await pathExists(targetPath)) {
     return;
   }
@@ -235,6 +240,7 @@ async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<
     }
 
     const removedPaths: string[] = [];
+    const installMetadata = await readInstallMetadata();
     const globalAgents = scope === 'global' || scope === 'both'
       ? await detectAgents(homeDir, 'global', managedSkillNames)
       : [];
@@ -244,6 +250,7 @@ async function removeCommand(mode: RemoveMode, options: RemoveOptions): Promise<
 
     if (scope === 'global' || scope === 'both') {
       await removeAgentInstalls(globalAgents, managedSkillNames, removedPaths);
+      await removePath(installMetadata?.overlay?.install_path ?? '', removedPaths);
       await removePath(globalSuperplanDir, removedPaths);
     }
 

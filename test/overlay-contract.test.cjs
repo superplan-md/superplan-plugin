@@ -38,6 +38,9 @@ test('overlay snapshot factory preserves explicit event and board payloads', () 
     title: 'Build overlay prototype',
     description: 'Show active task details in the compact shell',
     status: 'in_progress',
+    completed_acceptance_criteria: 2,
+    total_acceptance_criteria: 3,
+    progress_percent: 67,
     started_at: '2026-03-19T21:00:00.000Z',
     updated_at: '2026-03-19T21:30:00.000Z',
   };

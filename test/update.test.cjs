@@ -18,6 +18,13 @@ test('update reruns the bundled installer with recorded install metadata', async
     repo_url: 'https://github.com/example/custom-superplan.git',
     ref: 'release',
     install_prefix: path.join(sandbox.root, 'prefix'),
+    overlay: {
+      install_method: 'copied_prebuilt',
+      source_path: path.join(sandbox.root, 'overlay-bin'),
+      install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
+      install_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'overlay-bin'),
+      executable_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'overlay-bin'),
+    },
   });
 
   await withSandboxEnv(sandbox, async () => {
@@ -52,6 +59,8 @@ test('update reruns the bundled installer with recorded install metadata', async
     assert.equal(calls[0].env.SUPERPLAN_REPO_URL, 'https://github.com/example/custom-superplan.git');
     assert.equal(calls[0].env.SUPERPLAN_REF, 'release');
     assert.equal(calls[0].env.SUPERPLAN_INSTALL_PREFIX, path.join(sandbox.root, 'prefix'));
+    assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, path.join(sandbox.root, 'overlay-bin'));
+    assert.equal(calls[0].env.SUPERPLAN_OVERLAY_INSTALL_DIR, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
   });
 });
 

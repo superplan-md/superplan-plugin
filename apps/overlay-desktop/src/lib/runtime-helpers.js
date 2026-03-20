@@ -1,3 +1,21 @@
+export function getEmptyRuntimeSnapshot(workspacePath = '') {
+  return {
+    workspace_path: workspacePath,
+    session_id: workspacePath ? `workspace:${workspacePath}` : 'workspace:unknown',
+    updated_at: new Date(0).toISOString(),
+    active_task: null,
+    board: {
+      in_progress: [],
+      backlog: [],
+      done: [],
+      blocked: [],
+      needs_feedback: [],
+    },
+    attention_state: 'normal',
+    events: [],
+  };
+}
+
 export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/cli') {
   return {
     workspace_path: workspacePath,
@@ -8,6 +26,9 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
       title: 'Refine the compact in-progress overlay UX',
       description: 'Tighten the desktop kanban around live progress cues instead of decorative framing.',
       status: 'in_progress',
+      completed_acceptance_criteria: 2,
+      total_acceptance_criteria: 5,
+      progress_percent: 40,
       started_at: '2026-03-19T21:56:00.000Z',
       updated_at: '2026-03-19T22:10:00.000Z',
     },
@@ -18,6 +39,9 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
           title: 'Refine the compact in-progress overlay UX',
           description: 'Tighten the desktop kanban around live progress cues instead of decorative framing.',
           status: 'in_progress',
+          completed_acceptance_criteria: 2,
+          total_acceptance_criteria: 5,
+          progress_percent: 40,
           started_at: '2026-03-19T21:56:00.000Z',
           updated_at: '2026-03-19T22:10:00.000Z',
         },
@@ -65,6 +89,38 @@ export function getBrowserFallbackSnapshot(workspacePath = '/Users/puneetbhatt/c
     },
     attention_state: 'normal',
     events: [],
+  };
+}
+
+export function getSnapshotTaskProgress(snapshot) {
+  const activeTask = snapshot.active_task;
+
+  if (
+    activeTask
+    && typeof activeTask.completed_acceptance_criteria === 'number'
+    && typeof activeTask.total_acceptance_criteria === 'number'
+  ) {
+    const total = activeTask.total_acceptance_criteria;
+    const done = Math.min(activeTask.completed_acceptance_criteria, total);
+
+    return {
+      done,
+      total,
+      ratio: total === 0 ? 0 : done / total,
+    };
+  }
+
+  const total = snapshot.board.in_progress.length
+    + snapshot.board.backlog.length
+    + snapshot.board.done.length
+    + snapshot.board.blocked.length
+    + snapshot.board.needs_feedback.length;
+  const done = snapshot.board.done.length;
+
+  return {
+    done,
+    total,
+    ratio: total === 0 ? 0 : done / total,
   };
 }
 

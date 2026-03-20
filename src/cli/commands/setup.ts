@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { confirm, select } from '@inquirer/prompts';
+import { writeOverlayPreference } from '../overlay-preferences';
 
 interface AgentEnvironment {
   name: string;
@@ -147,12 +148,17 @@ Common commands:
 - \`superplan task request-feedback <task_id> --message "<message>" --json\`
 - \`superplan task complete <task_id> --json\`
 - \`superplan task fix --json\`
+- \`superplan overlay ensure --json\`
+- \`superplan overlay hide --json\`
 
 Execution loop:
 1. Check \`superplan status --json\`
 2. Claim work with \`superplan run --json\`
 3. Inspect the selected task before editing code
 4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
+5. If overlay support is enabled for this workspace, use \`superplan overlay ensure --json\` when the workspace has meaningful runtime state and \`superplan overlay hide --json\` when it becomes idle or empty
+
+Never write \`.superplan/runtime/overlay.json\` by hand.
 """`;
 }
 
@@ -523,6 +529,17 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
       };
     }
 
+    const enableGlobalOverlay = options.quiet
+      ? false
+      : ((scope === 'global' || scope === 'both')
+        ? await confirm({ message: 'Enable desktop overlay by default on this machine?' })
+        : false);
+    const enableLocalOverlay = options.quiet
+      ? false
+      : ((scope === 'local' || scope === 'both')
+        ? await confirm({ message: 'Enable desktop overlay in this repository?' })
+        : false);
+
     const skillsSourceError = await ensureSkillsSource(sourceSkillsDir);
     if (skillsSourceError) {
       return skillsSourceError;
@@ -537,6 +554,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
     if (scope === 'global' || scope === 'both') {
       await ensureGlobalSetup(globalConfigDir, globalConfigPath, globalSkillsDir, sourceSkillsDir);
+      await writeOverlayPreference(enableGlobalOverlay, { scope: 'global', cwd });
       if (homeAgents.length > 0) {
         await installAgentSkills(globalSkillsDir, homeAgents);
       }
@@ -544,6 +562,7 @@ export async function setup(options: SetupOptions): Promise<SetupResult> {
 
     if (scope === 'local' || scope === 'both') {
       await ensureLocalSetup(localSuperplanDir, localConfigPath, localSkillsDir, localChangesDir, sourceSkillsDir);
+      await writeOverlayPreference(enableLocalOverlay, { scope: 'local', cwd });
       if (repoAgents.length > 0) {
         await installAgentSkills(localSkillsDir, repoAgents);
       }

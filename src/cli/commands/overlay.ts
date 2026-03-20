@@ -1,22 +1,39 @@
 import { task } from './task';
 import { refreshOverlaySnapshot, setOverlayVisibilityRequest } from '../overlay-runtime';
+import {
+  hasLocalSuperplanRoot,
+  readOverlayPreferences,
+  writeOverlayPreference,
+  type OverlayPreferenceScope,
+} from '../overlay-preferences';
+import { launchInstalledOverlayCompanion, type OverlayCompanionLaunchResult } from '../overlay-companion';
 
-type OverlaySubcommand = 'ensure' | 'show' | 'hide';
+type OverlayRequestedAction = 'ensure' | 'show' | 'hide';
+type OverlaySubcommand = OverlayRequestedAction | 'enable' | 'disable' | 'status';
 
 export type OverlayResult =
   | {
       ok: true;
       data: {
-        requested_action: OverlaySubcommand;
+        requested_action?: OverlayRequestedAction;
+        applied_action?: OverlayRequestedAction;
         visible: boolean;
+        enabled: boolean;
+        global_enabled: boolean | null;
+        local_enabled: boolean | null;
+        effective_scope: OverlayPreferenceScope | null;
         snapshot_path: string;
         control_path: string;
         attention_state: 'normal' | 'needs_feedback' | 'all_tasks_done' | null;
+        has_content: boolean;
+        reason?: 'disabled' | 'empty';
+        config_path?: string;
+        companion?: OverlayCompanionLaunchResult;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
-const OVERLAY_SUBCOMMANDS = new Set<OverlaySubcommand>(['ensure', 'show', 'hide']);
+const OVERLAY_SUBCOMMANDS = new Set<OverlaySubcommand>(['ensure', 'show', 'hide', 'enable', 'disable', 'status']);
 
 export function getOverlayCommandHelpMessage(options: { subcommand?: string }): string {
   const intro = options.subcommand
@@ -27,11 +44,17 @@ export function getOverlayCommandHelpMessage(options: { subcommand?: string }): 
     intro,
     '',
     'Overlay commands:',
-    '  ensure                      Prepare overlay runtime state and request the companion to be visible',
-    '  show                        Request the overlay companion to become visible',
+    '  enable [--global]           Enable overlay behavior (local by default, global with --global)',
+    '  disable [--global]          Disable overlay behavior (local by default, global with --global)',
+    '  status                      Show effective overlay preference and runtime visibility state',
+    '  ensure                      Prepare overlay runtime state and launch or reveal the installed companion',
+    '  show                        Launch or reveal the installed overlay companion',
     '  hide                        Request the overlay companion to hide its window',
     '',
     'Examples:',
+    '  superplan overlay enable',
+    '  superplan overlay disable --global',
+    '  superplan overlay status',
     '  superplan overlay ensure',
     '  superplan overlay show',
     '  superplan overlay hide',
@@ -50,7 +73,38 @@ function getInvalidOverlayCommandError(subcommand?: string): OverlayResult {
 }
 
 function getPositionalArgs(args: string[]): string[] {
-  return args.filter(arg => arg !== '--json' && arg !== '--quiet');
+  return args.filter(arg => arg !== '--json' && arg !== '--quiet' && arg !== '--global');
+}
+
+function getPreferenceScope(args: string[]): OverlayPreferenceScope {
+  return args.includes('--global') ? 'global' : 'local';
+}
+
+function hasRenderableSnapshotContent(snapshot: {
+  active_task: unknown;
+  attention_state: string;
+  board: {
+    in_progress: unknown[];
+    backlog: unknown[];
+    done: unknown[];
+    blocked: unknown[];
+    needs_feedback: unknown[];
+  };
+  events: unknown[];
+}): boolean {
+  if (snapshot.active_task) {
+    return true;
+  }
+
+  if (snapshot.attention_state !== 'normal') {
+    return true;
+  }
+
+  if (snapshot.events.length > 0) {
+    return true;
+  }
+
+  return Object.values(snapshot.board).some(column => column.length > 0);
 }
 
 async function loadTasksForSnapshot() {
@@ -84,34 +138,142 @@ async function ensureOrShowOverlay(subcommand: 'ensure' | 'show'): Promise<Overl
     return tasksResult;
   }
 
-  const [{ paths, snapshot }, { control }] = await Promise.all([
+  const [{ paths, snapshot }, preferences] = await Promise.all([
     refreshOverlaySnapshot(tasksResult.data.tasks),
-    setOverlayVisibilityRequest(subcommand),
+    readOverlayPreferences(),
+  ]);
+  const hasContent = hasRenderableSnapshotContent(snapshot);
+  const appliedAction: OverlayRequestedAction = preferences.effective_enabled && hasContent ? subcommand : 'hide';
+  const [{ control }, companion] = await Promise.all([
+    setOverlayVisibilityRequest(appliedAction),
+    appliedAction === 'hide'
+      ? Promise.resolve<OverlayCompanionLaunchResult>({
+          attempted: false,
+          launched: false,
+          configured: false,
+          launchable: false,
+          source: null,
+          install_path: null,
+          executable_path: null,
+          workspace_path: snapshot.workspace_path,
+          reason: 'not_requested',
+        })
+      : launchInstalledOverlayCompanion(snapshot.workspace_path),
   ]);
 
   return {
     ok: true,
     data: {
       requested_action: subcommand,
+      applied_action: appliedAction,
       visible: control.visible,
+      enabled: preferences.effective_enabled,
+      global_enabled: preferences.global_enabled,
+      local_enabled: preferences.local_enabled,
+      effective_scope: preferences.effective_scope,
       snapshot_path: paths.snapshot_path,
       control_path: paths.control_path,
       attention_state: snapshot.attention_state,
+      has_content: hasContent,
+      companion,
+      ...(preferences.effective_enabled ? {} : { reason: 'disabled' as const }),
+      ...(preferences.effective_enabled && !hasContent ? { reason: 'empty' as const } : {}),
     },
   };
 }
 
 async function hideOverlay(): Promise<OverlayResult> {
-  const { paths, control } = await setOverlayVisibilityRequest('hide');
+  const [{ paths, control }, preferences] = await Promise.all([
+    setOverlayVisibilityRequest('hide'),
+    readOverlayPreferences(),
+  ]);
 
   return {
     ok: true,
     data: {
       requested_action: 'hide',
+      applied_action: 'hide',
       visible: control.visible,
+      enabled: preferences.effective_enabled,
+      global_enabled: preferences.global_enabled,
+      local_enabled: preferences.local_enabled,
+      effective_scope: preferences.effective_scope,
       snapshot_path: paths.snapshot_path,
       control_path: paths.control_path,
       attention_state: null,
+      has_content: false,
+    },
+  };
+}
+
+function getInitRequiredOverlayError(): OverlayResult {
+  return {
+    ok: false,
+    error: {
+      code: 'INIT_REQUIRED',
+      message: 'Run superplan init before changing local overlay preferences',
+      retryable: true,
+    },
+  };
+}
+
+async function setOverlayEnabled(enabled: boolean, scope: OverlayPreferenceScope): Promise<OverlayResult> {
+  if (scope === 'local' && !await hasLocalSuperplanRoot()) {
+    return getInitRequiredOverlayError();
+  }
+
+  const [{ config_path }, { paths }] = await Promise.all([
+    writeOverlayPreference(enabled, { scope }),
+    setOverlayVisibilityRequest('hide'),
+  ]);
+  const nextPreferences = await readOverlayPreferences();
+
+  return {
+    ok: true,
+    data: {
+      applied_action: 'hide',
+      visible: false,
+      enabled: nextPreferences.effective_enabled,
+      global_enabled: nextPreferences.global_enabled,
+      local_enabled: nextPreferences.local_enabled,
+      effective_scope: nextPreferences.effective_scope,
+      snapshot_path: paths.snapshot_path,
+      control_path: paths.control_path,
+      attention_state: null,
+      has_content: false,
+      config_path,
+      ...(enabled ? {} : { reason: 'disabled' as const }),
+    },
+  };
+}
+
+async function getOverlayStatus(): Promise<OverlayResult> {
+  const tasksResult = await loadTasksForSnapshot();
+  if (!tasksResult.ok) {
+    return tasksResult;
+  }
+
+  const [{ paths }, preferences] = await Promise.all([
+    refreshOverlaySnapshot(tasksResult.data.tasks),
+    readOverlayPreferences(),
+  ]);
+
+  const hasContent = tasksResult.data.tasks.length > 0;
+
+  return {
+    ok: true,
+    data: {
+      visible: preferences.effective_enabled && hasContent,
+      enabled: preferences.effective_enabled,
+      global_enabled: preferences.global_enabled,
+      local_enabled: preferences.local_enabled,
+      effective_scope: preferences.effective_scope,
+      snapshot_path: paths.snapshot_path,
+      control_path: paths.control_path,
+      attention_state: null,
+      has_content: hasContent,
+      ...(!preferences.effective_enabled ? { reason: 'disabled' as const } : {}),
+      ...(preferences.effective_enabled && !hasContent ? { reason: 'empty' as const } : {}),
     },
   };
 }
@@ -126,6 +288,18 @@ export async function overlay(args: string[]): Promise<OverlayResult> {
 
   if (subcommand === 'ensure' || subcommand === 'show') {
     return ensureOrShowOverlay(subcommand);
+  }
+
+  if (subcommand === 'enable') {
+    return setOverlayEnabled(true, getPreferenceScope(args));
+  }
+
+  if (subcommand === 'disable') {
+    return setOverlayEnabled(false, getPreferenceScope(args));
+  }
+
+  if (subcommand === 'status') {
+    return getOverlayStatus();
   }
 
   return hideOverlay();

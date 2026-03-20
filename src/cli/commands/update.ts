@@ -1,20 +1,10 @@
 import * as fs from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'node:child_process';
+import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 
 const DEFAULT_REPO_URL = 'https://github.com/superplan-md/cli.git';
 const DEFAULT_REF = 'dev';
-
-interface InstallMetadata {
-  install_method?: 'remote_repo' | 'local_source';
-  repo_url?: string;
-  ref?: string;
-  install_prefix?: string;
-  install_bin?: string;
-  source_dir?: string;
-  installed_at?: string;
-}
 
 interface UpdateOptions {
   json?: boolean;
@@ -53,25 +43,12 @@ export type UpdateResult =
       };
     };
 
-function getInstallMetadataPath(): string {
-  return path.join(os.homedir(), '.config', 'superplan', 'install.json');
-}
-
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
     return true;
   } catch {
     return false;
-  }
-}
-
-async function readInstallMetadata(): Promise<InstallMetadata | null> {
-  try {
-    const content = await fs.readFile(getInstallMetadataPath(), 'utf-8');
-    return JSON.parse(content) as InstallMetadata;
-  } catch {
-    return null;
   }
 }
 
@@ -139,6 +116,12 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const repoUrl = process.env.SUPERPLAN_REPO_URL || installMetadata?.repo_url || DEFAULT_REPO_URL;
   const ref = process.env.SUPERPLAN_REF || installMetadata?.ref || DEFAULT_REF;
   const installPrefix = process.env.SUPERPLAN_INSTALL_PREFIX || installMetadata?.install_prefix || '';
+  const overlaySourcePath = process.env.SUPERPLAN_OVERLAY_SOURCE_PATH || installMetadata?.overlay?.source_path || '';
+  const overlayInstallDir = process.env.SUPERPLAN_OVERLAY_INSTALL_DIR || installMetadata?.overlay?.install_dir || '';
+  const overlayExecutableRelativePath =
+    process.env.SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH
+    || installMetadata?.overlay?.executable_relative_path
+    || '';
   const runner = deps.runInstaller ?? runCommand;
 
   try {
@@ -148,6 +131,11 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
         SUPERPLAN_REPO_URL: repoUrl,
         SUPERPLAN_REF: ref,
         ...(installPrefix ? { SUPERPLAN_INSTALL_PREFIX: installPrefix } : {}),
+        ...(overlaySourcePath ? { SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath } : {}),
+        ...(overlayInstallDir ? { SUPERPLAN_OVERLAY_INSTALL_DIR: overlayInstallDir } : {}),
+        ...(overlayExecutableRelativePath
+          ? { SUPERPLAN_OVERLAY_EXECUTABLE_RELATIVE_PATH: overlayExecutableRelativePath }
+          : {}),
       },
     });
 
