@@ -1,14 +1,15 @@
-import { setup } from './commands/setup';
-import { change } from './commands/change';
-import { doctor } from './commands/doctor';
-import { parse } from './commands/parse';
-import { init } from './commands/init';
-import { task } from './commands/task';
-import { purge, remove } from './commands/remove';
-import { run } from './commands/run';
-import { sync } from './commands/sync';
-import { status } from './commands/status';
-import { update } from './commands/update';
+import { setup } from "./commands/setup";
+import { change } from "./commands/change";
+import { doctor } from "./commands/doctor";
+import { parse } from "./commands/parse";
+import { init } from "./commands/init";
+import { task } from "./commands/task";
+import { purge, remove } from "./commands/remove";
+import { run } from "./commands/run";
+import { sync } from "./commands/sync";
+import { status } from "./commands/status";
+import { overlay } from "./commands/overlay";
+import { update } from "./commands/update";
 
 type CommandOptions = {
   json: boolean;
@@ -21,7 +22,10 @@ type CommandResult = {
   error?: { code: string; message: string; retryable: boolean };
 };
 
-type CommandHandler = (args: string[], options: CommandOptions) => Promise<CommandResult>;
+type CommandHandler = (
+  args: string[],
+  options: CommandOptions,
+) => Promise<CommandResult>;
 
 function hasError(result: CommandResult): result is CommandResult & {
   error: { code: string; message: string; retryable: boolean };
@@ -41,8 +45,8 @@ function normalizeCliResult(result: CommandResult) {
   return {
     ok: false,
     error: result.error ?? {
-      code: 'UNKNOWN_ERROR',
-      message: 'An unknown error occurred',
+      code: "UNKNOWN_ERROR",
+      message: "An unknown error occurred",
       retryable: false,
     },
   };
@@ -60,21 +64,27 @@ export const router: Record<string, CommandHandler> = {
   sync: async () => sync(),
   status: async () => status(),
   task: async (args) => task(args),
+  overlay: async (args) => overlay(args),
   update: async (_args, options) => update(options),
 };
 
 export async function routeCommand(args: string[]) {
   const command = args[0];
   const options = {
-    json: args.includes('--json'),
-    quiet: args.includes('--quiet'),
+    json: args.includes("--json"),
+    quiet: args.includes("--quiet"),
   };
   const commandArgs = args.slice(1);
   const handler = command ? router[command as keyof typeof router] : undefined;
 
   if (handler) {
     const result = await handler(commandArgs, options);
-    if (hasError(result) && !options.json && !options.quiet && result.error.code === 'INVALID_TASK_COMMAND') {
+    if (
+      hasError(result) &&
+      !options.json &&
+      !options.quiet &&
+      result.error.code === "INVALID_TASK_COMMAND"
+    ) {
       console.error(result.error.message);
     } else {
       const normalizedResult = normalizeCliResult(result);
@@ -90,14 +100,20 @@ export async function routeCommand(args: string[]) {
       process.exitCode = 1;
     }
   } else {
-    console.error(JSON.stringify({
-      ok: false,
-      error: {
-        code: "UNKNOWN_COMMAND",
-        message: `Unknown command: ${command}`,
-        retryable: false
-      }
-    }, null, 2));
+    console.error(
+      JSON.stringify(
+        {
+          ok: false,
+          error: {
+            code: "UNKNOWN_COMMAND",
+            message: `Unknown command: ${command}`,
+            retryable: false,
+          },
+        },
+        null,
+        2,
+      ),
+    );
     process.exitCode = 1;
   }
 }
