@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { routeCommand, router } from './router';
+import { getChangeCommandHelpMessage } from './commands/change';
 import { getTaskCommandHelpMessage } from './commands/task';
 import { getOverlayCommandHelpMessage } from './commands/overlay';
 
@@ -32,15 +33,18 @@ Usage:
   superplan <command>
 
 Commands:
+  change      Create tracked work structure
   init        Initialize Superplan in this repo
   setup       Setup Superplan on this machine or in this repo
+  sync        Refresh Superplan's view of this repo
+  update      Update the installed Superplan CLI
   remove      Remove Superplan installation
   purge       Purge Superplan installation
   doctor      Validate setup
   parse       Parse superplan artifacts
   run         Run the task execution loop
   status      Show current task status summary
-  task        Task operations
+  task        Task runtime and review operations
   overlay     Overlay companion operations
 
 Options:
@@ -90,6 +94,22 @@ async function main() {
 
   if (command === 'overlay' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getOverlayCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'change' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getChangeCommandHelpMessage({});
     if (json || quiet) {
       printJsonResult({
         ok: true,

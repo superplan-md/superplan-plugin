@@ -1,15 +1,30 @@
 # Superplan CLI
 
-Plan work in markdown. Run it with a runtime.
+Turn normal planning into an executable local workflow.
 
-Superplan is a lightweight task execution CLI for repositories that want durable task contracts, agent-friendly JSON output, and a simple runtime loop without a heavyweight project system.
+Superplan is a lightweight planning and execution CLI for repositories that want durable task contracts, agent-friendly JSON output, and a simple runtime loop without a heavyweight project system.
 
-It is built for workflows where:
+It is built for teams and coding agents that want planning to stay:
 
-- tasks live in versioned markdown
-- readiness is computed from task contracts plus runtime state
-- humans and coding agents use the same command surface
-- the repo stays inspectable without a database or web app
+- local and inspectable
+- resumable after interruptions
+- shared between humans and agents
+- structured enough to pick the right next task without a separate web app
+
+## Normal Planning Vs Superplan
+
+Normal planning in a repo usually means some mix of chat history, scratch notes, TODO comments, and memory. That works until work gets interrupted, handed off, or split across dependencies.
+
+Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
+
+| Normal planning | Superplan planning |
+| --- | --- |
+| Notes and plans drift across chats and files | Task contracts live under `.superplan/changes/` |
+| The next step is often guessed manually | `superplan run --json` picks or continues the next task |
+| “Done” often means different things to different people | `complete`, `approve`, and `reopen` make review state explicit |
+| Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
+| Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
+| Planning structure is often handwritten | `superplan change new` and `superplan task new` scaffold the common path |
 
 ## Why Superplan
 
@@ -23,19 +38,89 @@ That split makes it easier to reason about what work exists, what is happening n
 
 ## Quick Start
 
-### 1. Install dependencies
+### Install with curl
+
+If you want a one-command installer, use:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | sh
+```
+
+The installer:
+
+- clones the Superplan CLI repo
+- installs dependencies when needed
+- builds the CLI
+- installs `superplan` globally with npm
+
+Prerequisites:
+
+- `node`
+- `npm`
+- `git`
+
+You can also install to a custom npm prefix:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
+```
+
+### Install with npm from a local checkout
+
+If you prefer an npm-driven install from source, build the CLI and install it globally from the repo root:
+
+```bash
+git clone -b dev https://github.com/superplan-md/cli.git
+cd cli
+npm install
+npm run build
+npm install -g .
+```
+
+Then verify the CLI is available:
+
+```bash
+superplan --version
+```
+
+To update a normal installed copy later:
+
+```bash
+superplan update
+```
+
+If `superplan update` returns `Unknown command: update`, the installed binary is older than the update feature. In that case, do a one-time manual refresh from a checkout:
+
+```bash
+npm run build
+npm install -g .
+```
+
+After that bootstrap update, future CLI refreshes can use `superplan update`.
+
+For local source installs, update from the checkout and reinstall explicitly.
+
+If the repo's task files or runtime state changed and you want Superplan to refresh its view of the project:
+
+```bash
+superplan sync --json
+```
+
+### Run from source without a global install
+
+#### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Build the CLI
+#### 2. Build the CLI
 
 ```bash
 npm run build
 ```
 
-### 3. Set up Superplan
+#### 3. Set up Superplan
 
 Global setup:
 
@@ -49,7 +134,7 @@ Quiet machine-level setup for automation:
 node dist/cli/main.js setup --quiet --json
 ```
 
-### 4. Initialize a repo
+#### 4. Initialize a repo
 
 ```bash
 node dist/cli/main.js init --quiet --json
@@ -65,9 +150,16 @@ That creates the repo-local Superplan scaffold:
   config.toml
 ```
 
+#### 5. Create your first change and task
+
+```bash
+superplan change new improve-task-authoring
+superplan task new improve-task-authoring --title "Add authoring scaffold"
+```
+
 ## Core Workflow
 
-The intended execution loop is:
+The intended runtime loop is:
 
 ```bash
 superplan status --json
@@ -75,13 +167,31 @@ superplan run --json
 superplan task show <task_id> --json
 ```
 
+When you are shaping new work instead of executing existing work, start with:
+
+```bash
+superplan change new <change-slug>
+superplan task new <change-slug> --title "Describe the first task"
+```
+
 Then continue with whichever runtime command matches the situation:
 
 ```bash
+superplan sync --json
 superplan task block <task_id> --reason "..."
 superplan task request-feedback <task_id> --message "..."
 superplan task fix --json
 superplan task complete <task_id> --json
+superplan task approve <task_id> --json
+superplan task reopen <task_id> --reason "..."
+```
+
+Review handoff works like this:
+
+```bash
+superplan task complete <task_id> --json   # implementation done, send to review
+superplan task approve <task_id> --json    # final signoff, mark done
+superplan task reopen <task_id> --reason "Changes requested"
 ```
 
 > Do not hand-edit lifecycle state in markdown task files. Use runtime commands.
@@ -92,29 +202,42 @@ Current top-level commands:
 
 | Command | What it does |
 | --- | --- |
+| `change` | Create tracked work structure |
 | `init` | Initialize Superplan in the current repo |
 | `setup` | Install Superplan config and bundled skills |
+| `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
+| `update` | Update the installed Superplan CLI |
 | `remove` | Remove a Superplan installation |
 | `purge` | Remove Superplan state more aggressively |
 | `doctor` | Validate setup and installation health |
 | `parse` | Parse task contracts and return diagnostics |
 | `run` | Start or continue the next task |
-| `status` | Show active, ready, blocked, and feedback-needed tasks |
-| `task` | Inspect and transition task runtime state |
+| `status` | Show active, ready, in-review, blocked, and feedback-needed tasks |
+| `task` | Inspect and transition task runtime state, including review handoff |
 
 Task-specific help is available via:
 
 ```bash
 superplan task --help
+superplan change --help
 ```
 
 ## Task Contracts
 
-Superplan currently uses markdown task files stored under:
+Superplan uses markdown task files stored under:
 
 ```text
 .superplan/changes/<change-slug>/tasks/T-xxx.md
 ```
+
+You can scaffold the common path instead of writing everything by hand:
+
+```bash
+superplan change new improve-task-authoring
+superplan task new improve-task-authoring --title "Add change scaffolding"
+```
+
+Task IDs are allocated globally across `.superplan/changes/` so dependencies and runtime references stay unambiguous across changes.
 
 Each task contract is expected to include:
 
@@ -200,7 +323,10 @@ superplan parse --json
 
 - The main CLI help shows the top-level Superplan commands.
 - `superplan task --help` is intentionally narrower and emphasizes the core task loop.
-- The current system is CLI-first and markdown-first; there is no active server surface right now.
+- `superplan change new` and `superplan task new` create the canonical authoring structure under `.superplan/changes/`.
+- `superplan sync` refreshes Superplan's view of the current repo.
+- `superplan update` is intended for normal installed copies of the CLI, not local source checkouts.
+- The current system is CLI-first and markdown-first.
 
 ## License
 

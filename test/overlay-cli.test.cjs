@@ -130,7 +130,10 @@ Finish me
     },
   });
 
-  parseCliJson(await runCli(['task', 'complete', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
+  const reviewPayload = parseCliJson(await runCli(['task', 'complete', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
+  assert.equal(reviewPayload.data.status, 'in_review');
+
+  parseCliJson(await runCli(['task', 'approve', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
 
   const doneSnapshot = await readJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
   assert.equal(doneSnapshot.attention_state, 'all_tasks_done');

@@ -2,6 +2,12 @@
   "name": "superplan",
   "version": "0.1.0",
   "description": "Superplan CLI",
+  "files": [
+    "dist",
+    "scripts/install.sh",
+    "README.md",
+    "package.json"
+  ],
   "bin": {
     "superplan": "./dist/cli/main.js"
   },
