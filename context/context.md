@@ -51,7 +51,7 @@ Important install note:
 - `src/cli/commands/init.ts`: Creates repo-local `.superplan/` scaffolding, including `.superplan/config.toml`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`.
 - `src/cli/commands/setup.ts`: Installs Superplan config and bundled skills for supported agent environments. Supports global, local, both, and skip flows.
 - `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata, then refreshes existing skill installs.
-- `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Local removal now treats `.superplan/changes/` as part of repo-local Superplan state.
+- `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Machine-level removal also uninstalls the managed CLI package/bin, symlinked dev installs that can be inferred from the invoked `superplan` bin path, and overlay artifacts when they are recorded or inferable, and local removal targets the nearest parent Superplan workspace rather than only the exact current directory.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
 - `src/cli/commands/parse.ts`: Parses markdown task contracts, returns structured task data, and emits diagnostics.
 - `src/cli/commands/scaffold.ts`: Shared helpers for generating canonical change and task artifacts.

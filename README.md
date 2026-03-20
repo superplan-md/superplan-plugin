@@ -212,7 +212,7 @@ Current top-level commands:
 | `setup` | Install Superplan config and bundled skills |
 | `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
 | `update` | Update the installed Superplan CLI and refresh existing skills |
-| `remove` | Remove a Superplan installation |
+| `remove` | Remove a Superplan installation, including machine-level CLI installs and the nearest local Superplan workspace it can infer safely |
 | `purge` | Remove Superplan state more aggressively |
 | `doctor` | Validate setup and installation health |
 | `parse` | Parse task contracts and return diagnostics |
