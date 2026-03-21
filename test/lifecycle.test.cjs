@@ -44,6 +44,9 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan status --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task show <task_id> --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task batch <change-slug> --stdin --json/);
+  assert.match(installedUsingSuperplanSkill, /manual creation of individual `tasks\/T-xxx\.md` files is off limits/i);
+  assert.match(installedUsingSuperplanSkill, /Entry routing is not permission to explore the CLI surface\./);
+  assert.match(installedUsingSuperplanSkill, /do not call `--help`, neighboring subcommands, or diagnostic commands/i);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task start <task_id> --json/);
@@ -57,6 +60,10 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedShapeSkill, /superplan task new <change-slug>/);
   assert.match(installedShapeSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedShapeSkill, /tasks\.md/);
+  assert.match(installedShapeSkill, /Manual creation of individual `tasks\/T-xxx\.md` files is off limits\./);
+  assert.match(installedShapeSkill, /use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls\./);
+  assert.match(installedShapeSkill, /Shaping is not permission to explore the CLI surface\./);
+  assert.match(installedShapeSkill, /use the current CLI contract already listed in this skill instead of probing adjacent commands/i);
   assert.doesNotMatch(installedShapeSkill, /superplan task batch <change-slug> --file <path> --json/);
 
   const installedExecuteTaskGraphSkill = await fs.readFile(
@@ -66,9 +73,17 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedExecuteTaskGraphSkill, /superplan run --json/);
   assert.match(installedExecuteTaskGraphSkill, /superplan run <task_id> --json/);
   assert.match(installedExecuteTaskGraphSkill, /superplan task show <task_id> --json/);
+  assert.match(installedExecuteTaskGraphSkill, /Execution is not permission to wander across CLI commands\./);
+  assert.match(installedExecuteTaskGraphSkill, /repeatedly polling `status` or `task show` without a concrete state, blocker, or handoff reason/i);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task why <task_id> --json/);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task start <task_id>/);
   assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task resume <task_id>/);
+
+  const installedRouteSkill = await fs.readFile(
+    path.join(sandbox.home, '.claude', 'skills', 'superplan-route', 'SKILL.md'),
+    'utf-8',
+  );
+  assert.match(installedRouteSkill, /Routing is not permission to explore the CLI surface\./);
 });
 
 test('interactive setup prints the current ascii wordmark once', async () => {

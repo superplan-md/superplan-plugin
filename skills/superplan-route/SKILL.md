@@ -54,6 +54,7 @@ Assumptions:
 - once Superplan engages, the smallest useful depth is preferred
 - graph truth, task-contract truth, and runtime truth are distinct
 - context risk can outweigh depth risk in brownfield work
+- routing should usually be possible without CLI command-surface exploration
 
 ## Routing Heuristic
 
@@ -66,6 +67,14 @@ Use this decision order:
 
 Prefer under-ceremony over over-ceremony only until trust or coordination would be lost.
 If lack of structure would hide real dependencies, choose the next deeper mode.
+
+## CLI Discipline
+
+Routing is not permission to explore the CLI surface.
+
+- if routing needs current Superplan state, use the one minimal command or artifact that answers it
+- do not call `--help` or neighboring commands just to orient yourself when the route is already clear
+- once the depth decision is clear, stop probing the CLI and hand off
 
 ## Depth Modes
 
@@ -115,6 +124,8 @@ See `references/depth-modes.md`.
 - routing to context first just because the repo is large
 - treating task files as the whole tracked model
 - choosing `program` just because the request sounds important
+- using routing as an excuse for CLI command-surface exploration
+- probing neighboring commands after the depth choice is already clear
 
 ## Context Routing Rule
 

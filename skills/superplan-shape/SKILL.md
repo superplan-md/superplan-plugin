@@ -53,6 +53,7 @@ Assumptions:
 - not all work is fully deterministic at shaping time
 - some work should be represented as investigation, prototype, or decision-gate work before deeper decomposition
 - the right shaping output is often a trajectory, not a frozen perfect plan
+- shaping should stop once the minimum useful artifact set and next executable frontier are clear
 
 ## Artifact Distinction Rule
 
@@ -110,6 +111,7 @@ Therefore:
 
 - for tracked work, author root `tasks.md` according to the hard contract even though the current CLI does not yet validate that layer
 - when Superplan is staying out, do not create graph artifacts
+- manual creation of individual `tasks/T-xxx.md` task contracts is off limits
 - once the root graph is ready, use `superplan task new` for one executable task or `superplan task batch` for multiple executable tasks instead of hand-creating new `tasks/T-xxx.md` files
 - keep current executable truth in task contract files the CLI can parse today
 - choose current CLI validation commands explicitly during shaping
@@ -119,9 +121,13 @@ See `references/cli-authoring-now.md`.
 
 ## Task Authoring Rule
 
+Manual creation of individual `tasks/T-xxx.md` files is off limits.
+
+Agents should spend their shaping effort on the graph and dependency structure in `tasks.md`, then mint canonical task contracts through the CLI.
+
 When shaping produces exactly one new task contract, `superplan task new <change-slug> --title "<title>" --json` is the default scaffold path.
 
-When shaping produces two or more new task contracts that are clear enough to author now, prefer one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls.
+When shaping produces two or more new task contracts that are clear enough to author now, use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls.
 
 For agent-first flows, prefer stdin over temporary files. Use `--file <path>` only when the batch spec itself must persist as a repo artifact.
 
@@ -187,6 +193,15 @@ For large tracked work, shape the graph according to the hard contract:
 
 Do not author "graph-like" markdown that ignores the contract shape.
 
+## CLI Discipline
+
+Shaping is not permission to explore the CLI surface.
+
+- use the current CLI contract already listed in this skill instead of probing adjacent commands
+- do not call `--help` or overlapping authoring or diagnostic commands when `change new`, `task new`, `task batch`, `parse`, `status`, `task show`, or `doctor` already cover the need
+- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task show <task_id> --json` for one task detail, and `superplan doctor --json` only for install or setup readiness
+- once the needed authoring or validation command is known, run it instead of exploring alternatives
+
 ## Workspace Precedence Rule
 
 Treat the workspace's existing setup as the default operating surface.
@@ -238,6 +253,7 @@ Treat the workspace's existing setup as the default operating surface.
 - performing broad execution here
 - creating tracked work without a root `changes/<slug>/tasks.md`
 - hand-creating new `tasks/T-xxx.md` task contracts when `superplan task new` can mint the canonical ID and scaffold
+- manually creating individual task files instead of using `superplan task batch --stdin --json` when multiple tasks are ready together
 - authoring root graphs or shard files without the hard-contract section shape
 - inventing unstable IDs or renumbering existing task IDs
 - putting canonical dependency or workstream ownership in task files once graph truth exists
@@ -252,6 +268,8 @@ Treat the workspace's existing setup as the default operating surface.
 - using future commands as if they already exist
 - hiding real CLI contract gaps behind generic statements like "capture this in the task graph" when no current graph parser exists
 - pretending uncertain work is already cleanly decomposed
+- using shaping as an excuse for CLI command-surface exploration after the artifact and frontier decisions are already clear
+- calling `--help`, `doctor`, `status`, or `task show` without a concrete shaping reason
 - pushing all ambiguity downstream into execution
 - replacing a working repo-native workflow with a Superplan-specific one by default
 

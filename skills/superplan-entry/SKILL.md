@@ -41,6 +41,16 @@ Use Superplan to coordinate and supervise that setup, not to replace it.
 
 Do not modify or outrank a working user-owned workflow unless the user explicitly asks.
 
+## CLI Discipline
+
+Entry routing is not permission to explore the CLI surface.
+
+- once the current intent is known, use the canonical command path already named in this skill
+- do not call `--help`, neighboring subcommands, or diagnostic commands just to orient yourself when the correct command is already listed
+- use `superplan task show <task_id> --json` only when one task's detailed readiness is actually needed
+- use `superplan doctor --json` only for setup or install uncertainty, not normal routing
+- once the needed CLI state is known, stop polling and route or act
+
 ## Trigger
 
 Use when:
@@ -82,6 +92,7 @@ Assumptions:
 - users should not need to think about which skill comes next
 - host environments may auto-trigger this skill
 - agents should not need to choose between multiple overlapping commands for the same intent
+- entry routing should usually resolve without CLI command-surface exploration
 - Superplan should improve the workflow, not hijack it
 
 ## Allowed Actions
@@ -130,15 +141,19 @@ Execution default:
 Authoring default:
 
 1. create the tracked change once with `superplan change new <change-slug> --json`
-2. use `superplan task new <change-slug> --title "<title>" --json` only when exactly one task should be created now
-3. use `superplan task batch <change-slug> --stdin --json` when two or more tasks are clear enough to create in one pass
-4. prefer stdin over temporary files for batch task authoring in agent flows
-5. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
+2. manual creation of individual `tasks/T-xxx.md` files is off limits; agents should shape the graph and dependencies first, then use the CLI to mint task contracts
+3. use `superplan task new <change-slug> --title "<title>" --json` only when exactly one task should be created now
+4. use `superplan task batch <change-slug> --stdin --json` when two or more tasks are clear enough to create in one pass
+5. when multiple tasks are ready together, prefer one batch call so the graph edges and batch-local dependencies are captured in one authoring step
+6. prefer stdin over temporary files for batch task authoring in agent flows
+7. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
 
 Canonical command rule:
 
 - prefer the one obvious command for the current intent
 - do not choose between multiple overlapping commands when one canonical path exists
+- do not explore neighboring CLI commands when one canonical path is already listed here
+- do not call `--help` or diagnostic commands just to confirm a command the skill already named
 - prefer commands that already return the needed task payload instead of making extra follow-up calls
 
 ## Entry Decision Order
@@ -210,6 +225,8 @@ See `references/routing-boundaries.md`.
 - sending already shaped work back to `superplan-route` by reflex
 - forcing engagement when Superplan adds no value
 - turning every request into tracked work
+- using entry routing as cover for CLI command-surface exploration once the next workflow owner is already clear
+- calling `--help`, neighboring subcommands, or repeated `status`/`task show`/`doctor` checks without a concrete routing need
 
 ## Readiness Rules
 
