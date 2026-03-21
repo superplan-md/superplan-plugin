@@ -71,7 +71,7 @@ Default priority task
   const statusPayload = parseCliJson(statusResult);
   assert.deepEqual(statusPayload.data, {
     active: null,
-    ready: ['T-001', 'T-002', 'T-003'],
+    ready: ['T-002', 'T-003', 'T-001'],
     in_review: [],
     blocked: [],
     needs_feedback: [],
@@ -121,7 +121,7 @@ Run me
   assert.equal(secondRunPayload.error, null);
 });
 
-test('task start from a nested repo directory writes runtime state at the repo root workspace', async () => {
+test('run with an explicit task id writes runtime state at the repo root workspace', async () => {
   const sandbox = await makeSandbox('superplan-task-nested-runtime-');
   const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
 
@@ -140,17 +140,18 @@ Start from nested cwd
 - [ ] Works
 `);
 
-  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-150', '--json'], {
+  const startPayload = parseCliJson(await runCli(['run', 'T-150', '--json'], {
     cwd: nestedCwd,
     env: sandbox.env,
   }));
 
+  assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
   assert.equal((await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'tasks.json'))).tasks['T-150'].status, 'in_progress');
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
-test('task lifecycle supports block, resume, request-feedback, and reset while appending runtime events', async () => {
+test('task lifecycle supports block, explicit run resume, request-feedback, and reset while appending runtime events', async () => {
   const sandbox = await makeSandbox('superplan-task-lifecycle-');
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-200.md'), `---
@@ -166,7 +167,8 @@ Lifecycle task
 - [ ] A
 `);
 
-  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const startPayload = parseCliJson(await runCli(['run', 'T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
 
   const blockPayload = parseCliJson(await runCli(['task', 'block', 'T-200', '--reason', 'Waiting on review', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
@@ -181,8 +183,10 @@ Lifecycle task
     needs_feedback: [],
   });
 
-  const resumePayload = parseCliJson(await runCli(['task', 'resume', 'T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const resumePayload = parseCliJson(await runCli(['run', 'T-200', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  assert.equal(resumePayload.data.action, 'resume');
   assert.equal(resumePayload.data.status, 'in_progress');
+  assert.equal(resumePayload.data.reason, 'Task was resumed explicitly');
 
   const feedbackPayload = parseCliJson(await runCli(['task', 'request-feedback', 'T-200', '--message', 'Please review', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   assert.equal(feedbackPayload.data.status, 'needs_feedback');

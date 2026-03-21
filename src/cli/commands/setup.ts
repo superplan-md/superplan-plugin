@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { checkbox, confirm, select } from '@inquirer/prompts';
 import { writeOverlayPreference } from '../overlay-preferences';
+import { CURRENT_ENTRY_SKILL_NAME, LEGACY_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 import { resolveWorkspaceRoot } from '../workspace-root';
 
 interface AgentEnvironment {
@@ -133,6 +134,9 @@ async function installSkillsNamespace(sourceDir: string, targetDir: string): Pro
 
   // Remove the legacy bundled Superplan skill entry before installing peer skills.
   await fs.rm(path.join(targetDir, 'superplan'), { recursive: true, force: true });
+  for (const legacySkillName of LEGACY_SUPERPLAN_SKILL_NAMES) {
+    await fs.rm(path.join(targetDir, legacySkillName), { recursive: true, force: true });
+  }
 
   for (const entry of entries) {
     if (entry.name === 'SKILL.md') {
@@ -165,6 +169,7 @@ Use the Superplan CLI in this repository as the source of truth for task state.
 Common commands:
 - \`superplan status --json\`
 - \`superplan run --json\`
+- \`superplan run <task_id> --json\`
 - \`superplan task show <task_id> --json\`
 - \`superplan task block <task_id> --reason "<reason>" --json\`
 - \`superplan task request-feedback <task_id> --message "<message>" --json\`
@@ -177,9 +182,9 @@ Common commands:
 Execution loop:
 1. Check \`superplan status --json\`
 2. Claim work with \`superplan run --json\`
-3. Use the task returned by \`superplan run --json\` before editing code; reach for \`superplan task show <task_id> --json\` only when you need one task's full details and readiness reasons
+3. Use the task returned by \`superplan run --json\` before editing code; use \`superplan run <task_id> --json\` when one known ready or paused task should become active; reach for \`superplan task show <task_id> --json\` only when you need one task's full details and readiness reasons
 4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
-5. If overlay support is enabled for this workspace, task start/resume/run transitions will auto-reveal the overlay when work becomes active; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
+5. If overlay support is enabled for this workspace, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task reopen\` will auto-reveal the overlay when work becomes active; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
 
 Never write \`.superplan/runtime/overlay.json\` by hand.
 """`;
@@ -440,7 +445,7 @@ function getScopePaths(scope: InstallScope, globalConfigPath: string, globalSkil
 
 function getAgentVerificationPath(agent: AgentEnvironment): string {
   if (agent.install_kind === 'skills_namespace') {
-    return path.join(agent.install_path, 'using-superplan', 'SKILL.md');
+    return path.join(agent.install_path, CURRENT_ENTRY_SKILL_NAME, 'SKILL.md');
   }
 
   return agent.install_path;

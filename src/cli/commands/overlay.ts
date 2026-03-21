@@ -1,3 +1,4 @@
+import * as fs from 'fs/promises';
 import { loadTasks } from './task';
 import { refreshOverlaySnapshot, setOverlayVisibilityRequest } from '../overlay-runtime';
 import {
@@ -9,11 +10,12 @@ import {
 import {
   applyRequestedOverlayAction,
   createSkippedCompanionLaunchResult,
+  hasRenderableSnapshotContent,
 } from '../overlay-visibility';
 import type { OverlayCompanionLaunchResult } from '../overlay-companion';
 
-type OverlayRequestedAction = 'ensure' | 'show' | 'hide';
-type OverlaySubcommand = OverlayRequestedAction | 'enable' | 'disable' | 'status';
+type OverlayRequestedAction = 'ensure' | 'hide';
+type OverlaySubcommand = 'ensure' | 'hide' | 'enable' | 'disable' | 'status';
 
 export type OverlayResult =
   | {
@@ -37,7 +39,10 @@ export type OverlayResult =
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
-const OVERLAY_SUBCOMMANDS = new Set<OverlaySubcommand>(['ensure', 'show', 'hide', 'enable', 'disable', 'status']);
+const OVERLAY_SUBCOMMANDS = new Set<OverlaySubcommand>(['ensure', 'hide', 'enable', 'disable', 'status']);
+const REMOVED_OVERLAY_SUBCOMMAND_GUIDANCE: Record<string, string> = {
+  show: 'Use "ensure" instead.',
+};
 
 export function getOverlayCommandHelpMessage(options: { subcommand?: string }): string {
   const intro = options.subcommand
@@ -52,7 +57,6 @@ export function getOverlayCommandHelpMessage(options: { subcommand?: string }): 
     '  disable [--global]          Disable overlay behavior (local by default, global with --global)',
     '  status                      Show effective overlay preference and runtime visibility state',
     '  ensure                      Prepare overlay runtime state and launch or reveal the installed companion',
-    '  show                        Launch or reveal the installed overlay companion',
     '  hide                        Request the overlay companion to hide its window',
     '',
     'Examples:',
@@ -60,7 +64,6 @@ export function getOverlayCommandHelpMessage(options: { subcommand?: string }): 
     '  superplan overlay disable --global',
     '  superplan overlay status',
     '  superplan overlay ensure',
-    '  superplan overlay show',
     '  superplan overlay hide',
   ].join('\n');
 }
@@ -71,6 +74,21 @@ function getInvalidOverlayCommandError(subcommand?: string): OverlayResult {
     error: {
       code: 'INVALID_OVERLAY_COMMAND',
       message: getOverlayCommandHelpMessage({ subcommand }),
+      retryable: true,
+    },
+  };
+}
+
+function getRemovedOverlayCommandError(subcommand: string): OverlayResult {
+  return {
+    ok: false,
+    error: {
+      code: 'INVALID_OVERLAY_COMMAND',
+      message: [
+        `Overlay command "${subcommand}" was removed for the leaner local MVP loop. ${REMOVED_OVERLAY_SUBCOMMAND_GUIDANCE[subcommand]}`,
+        '',
+        getOverlayCommandHelpMessage({}),
+      ].join('\n'),
       retryable: true,
     },
   };
@@ -88,20 +106,31 @@ async function loadTasksForSnapshot() {
   return await loadTasks();
 }
 
-async function ensureOrShowOverlay(subcommand: 'ensure' | 'show'): Promise<OverlayResult> {
+async function readRequestedOverlayVisibility(controlPath: string): Promise<boolean> {
+  try {
+    const content = await fs.readFile(controlPath, 'utf-8');
+    const parsedContent = JSON.parse(content) as { visible?: unknown };
+    return parsedContent.visible === true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureOverlay(): Promise<OverlayResult> {
+  const requestedAction = 'ensure';
   const tasksResult = await loadTasksForSnapshot();
   if (!tasksResult.ok) {
     return tasksResult;
   }
 
   const { paths, snapshot } = await refreshOverlaySnapshot(tasksResult.data.tasks);
-  const visibility = await applyRequestedOverlayAction(subcommand, snapshot);
+  const visibility = await applyRequestedOverlayAction(requestedAction, snapshot);
 
   return {
     ok: true,
     data: {
-      requested_action: subcommand,
-      applied_action: visibility.applied_action,
+      requested_action: requestedAction,
+      applied_action: visibility.applied_action === 'hide' ? 'hide' : 'ensure',
       visible: visibility.visible,
       enabled: visibility.enabled,
       global_enabled: visibility.global_enabled,
@@ -190,24 +219,24 @@ async function getOverlayStatus(): Promise<OverlayResult> {
     return tasksResult;
   }
 
-  const [{ paths }, preferences] = await Promise.all([
+  const [{ paths, snapshot }, preferences] = await Promise.all([
     refreshOverlaySnapshot(tasksResult.data.tasks),
     readOverlayPreferences(),
   ]);
-
-  const hasContent = tasksResult.data.tasks.length > 0;
+  const hasContent = hasRenderableSnapshotContent(snapshot);
+  const visible = await readRequestedOverlayVisibility(paths.control_path);
 
   return {
     ok: true,
     data: {
-      visible: preferences.effective_enabled && hasContent,
+      visible,
       enabled: preferences.effective_enabled,
       global_enabled: preferences.global_enabled,
       local_enabled: preferences.local_enabled,
       effective_scope: preferences.effective_scope,
       snapshot_path: paths.snapshot_path,
       control_path: paths.control_path,
-      attention_state: null,
+      attention_state: snapshot.attention_state,
       has_content: hasContent,
       ...(!preferences.effective_enabled ? { reason: 'disabled' as const } : {}),
       ...(preferences.effective_enabled && !hasContent ? { reason: 'empty' as const } : {}),
@@ -219,12 +248,16 @@ export async function overlay(args: string[]): Promise<OverlayResult> {
   const positionalArgs = getPositionalArgs(args);
   const subcommand = positionalArgs[0];
 
+  if (subcommand && Object.prototype.hasOwnProperty.call(REMOVED_OVERLAY_SUBCOMMAND_GUIDANCE, subcommand)) {
+    return getRemovedOverlayCommandError(subcommand);
+  }
+
   if (!subcommand || !OVERLAY_SUBCOMMANDS.has(subcommand as OverlaySubcommand)) {
     return getInvalidOverlayCommandError(subcommand);
   }
 
-  if (subcommand === 'ensure' || subcommand === 'show') {
-    return ensureOrShowOverlay(subcommand);
+  if (subcommand === 'ensure') {
+    return ensureOverlay();
   }
 
   if (subcommand === 'enable') {

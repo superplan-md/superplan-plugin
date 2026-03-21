@@ -38,11 +38,10 @@ Commands:
   setup       Setup Superplan on this machine or in this repo
   sync        Refresh Superplan's view of this repo
   update      Update the installed Superplan CLI and refresh skills
-  remove      Remove Superplan installation
-  purge       Purge Superplan installation
+  remove      Remove Superplan installation and state
   doctor      Validate setup
   parse       Parse superplan artifacts
-  run         Run the task execution loop
+  run         Start, resume, or continue task execution
   status      Show current task status summary
   task        Task runtime and review operations
   overlay     Overlay companion operations

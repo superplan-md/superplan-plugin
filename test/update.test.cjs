@@ -123,10 +123,10 @@ test('update refreshes installed skills for existing global and local setups', a
       },
     });
 
-    assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'release-readiness', 'SKILL.md')), true);
-    assert.equal(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'release-readiness', 'SKILL.md')), true);
-    assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'skills', 'release-readiness', 'SKILL.md')), true);
-    assert.equal(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'release-readiness', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-release-readiness', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-release-readiness', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'skills', 'superplan-release-readiness', 'SKILL.md')), true);
+    assert.equal(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-release-readiness', 'SKILL.md')), true);
   });
 });
 

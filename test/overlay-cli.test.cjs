@@ -35,8 +35,8 @@ test('overlay --help explains overlay lifecycle subcommands', async () => {
   assert.match(result.stdout, /disable\s+\[--global\]/);
   assert.match(result.stdout, /status\s+Show effective overlay preference/);
   assert.match(result.stdout, /ensure\s+Prepare overlay runtime state and launch or reveal the installed companion/);
-  assert.match(result.stdout, /show\s+Launch or reveal the installed overlay companion/);
   assert.match(result.stdout, /hide\s+Request the overlay companion to hide its window/);
+  assert.doesNotMatch(result.stdout, /^\s*show\s+/m);
 });
 
 test('overlay ensure keeps the companion hidden until overlay support is enabled', async () => {
@@ -123,7 +123,7 @@ Enable overlay
   assert.equal(ensurePayload.data.enabled, true);
 });
 
-test('task start honors the global overlay setting when local workspace config is missing', async () => {
+test('run with an explicit task id honors the global overlay setting when local workspace config is missing', async () => {
   const sandbox = await makeSandbox('superplan-overlay-global-fallback-');
 
   await writeFile(path.join(sandbox.home, '.config', 'superplan', 'config.toml'), `version = "0.1"
@@ -144,12 +144,13 @@ Start with only global overlay config
 - [ ] A
 `);
 
-  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-010A', '--json'], {
+  const startPayload = parseCliJson(await runCli(['run', 'T-010A', '--json'], {
     cwd: sandbox.cwd,
     env: sandbox.env,
   }));
 
   assert.equal(startPayload.ok, true);
+  assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
   assert.equal(startPayload.data.overlay.requested_action, 'ensure');
   assert.equal(startPayload.data.overlay.enabled, true);
@@ -249,6 +250,34 @@ Launch overlay companion
   assert.match(launchOutput, new RegExp(`${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'));
 });
 
+test('overlay status reports the last requested runtime visibility instead of recomputing it from content', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-status-');
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-015.md'), `---
+task_id: T-015
+status: pending
+priority: high
+---
+
+## Description
+Overlay status task
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  parseCliJson(await runCli(['overlay', 'ensure', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  parseCliJson(await runCli(['overlay', 'hide', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const statusPayload = parseCliJson(await runCli(['overlay', 'status', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  assert.equal(statusPayload.ok, true);
+  assert.equal(statusPayload.data.enabled, true);
+  assert.equal(statusPayload.data.has_content, true);
+  assert.equal(statusPayload.data.visible, false);
+});
+
 test('overlay ensure launches the macOS app bundle through open with the explicit workspace path', async (t) => {
   if (process.platform !== 'darwin') {
     t.skip('macOS-specific launcher behavior');
@@ -315,7 +344,7 @@ Launch overlay companion app bundle
   assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
 });
 
-test('task start auto-launches the overlay companion when overlay is enabled', async () => {
+test('run with an explicit task id auto-launches the overlay companion when overlay is enabled', async () => {
   const sandbox = await makeSandbox('superplan-overlay-task-start-');
   const overlayOutputPath = path.join(sandbox.root, 'overlay-task-start.txt');
   const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
@@ -343,7 +372,7 @@ Auto-launch overlay on execution
 
   parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
-  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-012', '--json'], {
+  const startPayload = parseCliJson(await runCli(['run', 'T-012', '--json'], {
     cwd: sandbox.cwd,
     env: {
       ...sandbox.env,
@@ -355,6 +384,7 @@ Auto-launch overlay on execution
   const launchOutput = await waitForFile(overlayOutputPath);
 
   assert.equal(startPayload.ok, true);
+  assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.status, 'in_progress');
   assert.equal(startPayload.data.overlay.requested_action, 'ensure');
   assert.equal(startPayload.data.overlay.enabled, true);
@@ -363,7 +393,7 @@ Auto-launch overlay on execution
   assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
 });
 
-test('task start and resume ensure overlay visibility', async () => {
+test('run with an explicit task id ensures overlay visibility for both start and resume', async () => {
   const sandbox = await makeSandbox('superplan-overlay-pickup-');
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-250.md'), `---
@@ -380,13 +410,14 @@ Pickup overlay task
 `);
 
   parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const startPayload = parseCliJson(await runCli(['run', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const startedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
   const startedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
   assert.equal(startedControl.requested_action, 'ensure');
   assert.equal(startedControl.visible, true);
   assert.equal(startedSnapshot.active_task?.task_id, 'T-250');
+  assert.equal(startPayload.data.action, 'start');
   assert.equal(startPayload.data.overlay.requested_action, 'ensure');
   assert.equal(startPayload.data.overlay.enabled, true);
   assert.equal(startPayload.data.overlay.companion.launched, false);
@@ -394,7 +425,7 @@ Pickup overlay task
 
   parseCliJson(await runCli(['overlay', 'hide', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   parseCliJson(await runCli(['task', 'block', 'T-250', '--reason', 'Need to pause', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  const resumePayload = parseCliJson(await runCli(['task', 'resume', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  const resumePayload = parseCliJson(await runCli(['run', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const resumedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
   const resumedSnapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
@@ -402,6 +433,8 @@ Pickup overlay task
   assert.equal(resumedControl.visible, true);
   assert.equal(resumedSnapshot.active_task?.task_id, 'T-250');
   assert.equal(resumedSnapshot.active_task?.status, 'in_progress');
+  assert.equal(resumePayload.data.action, 'resume');
+  assert.equal(resumePayload.data.reason, 'Task was resumed explicitly');
   assert.equal(resumePayload.data.overlay.requested_action, 'ensure');
   assert.equal(resumePayload.data.overlay.enabled, true);
   assert.equal(resumePayload.data.overlay.companion.launched, false);
@@ -520,7 +553,7 @@ Needs review
 - [ ] A
 `);
 
-  parseCliJson(await runCli(['task', 'start', 'T-200', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
+  parseCliJson(await runCli(['run', 'T-200', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
   parseCliJson(await runCli(['task', 'request-feedback', 'T-200', '--message', 'Please review', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
 
   const feedbackSnapshot = await readJson(path.join(feedbackSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));

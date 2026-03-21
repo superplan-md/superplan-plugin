@@ -24,25 +24,39 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.equal(payload.data.verified, true);
   assert.equal(payload.error, null);
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'config.toml')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'using-superplan', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'release-readiness', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'regression-guarding', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'retrospective-postmortem', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'handoff-checkpointing', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'docs-sync', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'release-readiness', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'docs-sync', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-release-readiness', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-regression-guarding', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-retrospective-postmortem', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-handoff-checkpointing', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-docs-sync', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-release-readiness', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-docs-sync', 'SKILL.md')));
 
   const installedUsingSuperplanSkill = await fs.readFile(
-    path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md'),
+    path.join(sandbox.home, '.claude', 'skills', 'superplan-using-superplan', 'SKILL.md'),
     'utf-8',
   );
   assert.match(installedUsingSuperplanSkill, /superplan run --json/);
+  assert.match(installedUsingSuperplanSkill, /superplan run <task_id> --json/);
   assert.match(installedUsingSuperplanSkill, /superplan status --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task show <task_id> --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
+  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task start <task_id> --json/);
+  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task resume <task_id> --json/);
+
+  const installedExecuteTaskGraphSkill = await fs.readFile(
+    path.join(sandbox.home, '.claude', 'skills', 'superplan-execute-task-graph', 'SKILL.md'),
+    'utf-8',
+  );
+  assert.match(installedExecuteTaskGraphSkill, /superplan run --json/);
+  assert.match(installedExecuteTaskGraphSkill, /superplan run <task_id> --json/);
+  assert.match(installedExecuteTaskGraphSkill, /superplan task show <task_id> --json/);
+  assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task why <task_id> --json/);
+  assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task start <task_id>/);
+  assert.doesNotMatch(installedExecuteTaskGraphSkill, /superplan task resume <task_id>/);
 });
 
 test('interactive setup prints the current ascii wordmark once', async () => {
@@ -118,9 +132,9 @@ test('interactive setup installs only the selected agent integrations', async ()
     { name: 'Codex', value: 'codex', checked: false },
   ]);
   assert.equal(seenCheckboxChoices.length, 2);
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-using-superplan', 'SKILL.md')));
   assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), false);
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-using-superplan', 'SKILL.md')));
   assert.equal(await pathExists(path.join(sandbox.cwd, '.gemini', 'commands', 'superplan.toml')), false);
 });
 
@@ -163,7 +177,7 @@ test('interactive local setup from a nested repo directory installs into the rep
 
   assert.equal(confirmAnswers.length, 0);
   assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
-  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-using-superplan', 'SKILL.md')));
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
@@ -216,11 +230,11 @@ test('interactive setup select-all option installs every supported machine-level
     'gemini',
     'opencode',
   ]);
-  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-using-superplan', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'using-superplan', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'using-superplan', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'superplan-using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'superplan-using-superplan', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'superplan-using-superplan', 'SKILL.md')));
 });
 
 test('doctor reports valid after quiet global setup in a clean repo', async () => {
@@ -245,11 +259,11 @@ test('doctor reports missing home agent installs when a supported global agent d
   const sandbox = await makeSandbox('superplan-doctor-home-agent-');
 
   await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
-  await fs.mkdir(path.join(sandbox.home, '.config', 'superplan', 'skills', 'using-superplan'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-using-superplan'), { recursive: true });
   await fs.writeFile(path.join(sandbox.home, '.config', 'superplan', 'config.toml'), 'version = "0.1"\n', 'utf-8');
   await fs.writeFile(
-    path.join(sandbox.home, '.config', 'superplan', 'skills', 'using-superplan', 'SKILL.md'),
-    '# using-superplan\n',
+    path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-using-superplan', 'SKILL.md'),
+    '# superplan-using-superplan\n',
     'utf-8',
   );
 

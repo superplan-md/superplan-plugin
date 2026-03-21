@@ -72,6 +72,24 @@ to_lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
 }
 
+copy_local_source_snapshot() {
+  require_command tar
+  mkdir -p "$SOURCE_WORKTREE"
+
+  (
+    cd "$SUPERPLAN_SOURCE_DIR"
+    tar \
+      --exclude '.git' \
+      --exclude 'node_modules' \
+      --exclude 'apps/overlay-desktop/node_modules' \
+      --exclude 'apps/overlay-desktop/src-tauri/target' \
+      -cf - .
+  ) | (
+    cd "$SOURCE_WORKTREE"
+    tar -xf -
+  ) || fail "failed to copy local source snapshot from $SUPERPLAN_SOURCE_DIR"
+}
+
 resolve_overlay_release_target() {
   overlay_target="$(
     node - "$SOURCE_WORKTREE/scripts/overlay-release.js" "$(uname -s)" "$(uname -m)" <<'EOF'
@@ -257,8 +275,7 @@ fi
 if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
   [ -d "$SUPERPLAN_SOURCE_DIR" ] || fail "SUPERPLAN_SOURCE_DIR does not exist: $SUPERPLAN_SOURCE_DIR"
   say "Copying Superplan source from $SUPERPLAN_SOURCE_DIR"
-  mkdir -p "$SOURCE_WORKTREE"
-  cp -R "$SUPERPLAN_SOURCE_DIR"/. "$SOURCE_WORKTREE"
+  copy_local_source_snapshot
 else
   require_command git
   say "Cloning Superplan from $SUPERPLAN_REPO_URL"
@@ -289,18 +306,14 @@ INSTALL_PREFIX="$(npm prefix --global)"
 INSTALL_BIN_DIR="$INSTALL_PREFIX/bin"
 
 if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
-  say "Installing Superplan from local source snapshot"
-  mkdir -p "$INSTALL_PREFIX/lib/node_modules" "$INSTALL_BIN_DIR"
-  rm -rf "$INSTALL_PREFIX/lib/node_modules/superplan"
-  cp -R "$SOURCE_WORKTREE" "$INSTALL_PREFIX/lib/node_modules/superplan"
-  ln -sf ../lib/node_modules/superplan/dist/cli/main.js "$INSTALL_BIN_DIR/superplan"
+  say "Packing Superplan from local source snapshot"
 else
   say "Packing Superplan"
-  PACKAGE_TGZ="$(npm pack)"
-
-  say "Installing Superplan globally with npm"
-  npm install --global "$SOURCE_WORKTREE/$PACKAGE_TGZ" >/dev/null
 fi
+PACKAGE_TGZ="$(npm pack)"
+
+say "Installing Superplan globally with npm"
+npm install --global "$SOURCE_WORKTREE/$PACKAGE_TGZ" >/dev/null
 
 if [ -n "$SUPERPLAN_OVERLAY_SOURCE_PATH" ]; then
   say "Installing Superplan overlay companion"

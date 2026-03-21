@@ -30,11 +30,12 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /update\s+Update the installed Superplan CLI and refresh skills/);
   assert.match(result.stdout, /doctor\s+Validate setup/);
   assert.match(result.stdout, /parse\s+Parse superplan artifacts/);
-  assert.match(result.stdout, /purge\s+Purge Superplan installation/);
+  assert.match(result.stdout, /remove\s+Remove Superplan installation and state/);
   assert.match(result.stdout, /status\s+Show current task status summary/);
   assert.match(result.stdout, /task\s+Task runtime and review operations/);
   assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
   assert.doesNotMatch(result.stdout, /popup\s+Open or refocus the current task popup/);
+  assert.doesNotMatch(result.stdout, /\bpurge\b/);
 });
 
 test('cli returns version in json mode', async () => {
@@ -79,6 +80,21 @@ test('server is no longer part of the surfaced command set', async () => {
   });
 });
 
+test('purge is no longer part of the surfaced command set', async () => {
+  const result = await runCli(['purge', '--json']);
+  const payload = parseCliJson(result);
+
+  assert.equal(result.code, 1);
+  assert.deepEqual(payload, {
+    ok: false,
+    error: {
+      code: 'UNKNOWN_COMMAND',
+      message: 'Unknown command: purge',
+      retryable: false,
+    },
+  });
+});
+
 test('task command in quiet mode stays agent-safe json', async () => {
   const result = await runCli(['task', '--quiet']);
   const payload = parseCliJson(result);
@@ -101,6 +117,8 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.match(result.stdout, /reopen <task_id>\s+Move a review or done task back into implementation/);
   assert.match(result.stdout, /block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run/);
+  assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
+  assert.doesNotMatch(result.stdout, /\bresume <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bcurrent\b/);
   assert.doesNotMatch(result.stdout, /\bnext\b/);
   assert.doesNotMatch(result.stdout, /\bevents\b/);
@@ -169,6 +187,16 @@ test('removed task diagnostic commands fail fast and point users to the leaner l
   assert.equal(whyNextPayload.error.code, 'INVALID_TASK_COMMAND');
   assert.match(whyNextPayload.error.message, /\brun\b/);
 
+  const startPayload = parseCliJson(await runCli(['task', 'start', 'T-001', '--json']));
+  assert.equal(startPayload.ok, false);
+  assert.equal(startPayload.error.code, 'INVALID_TASK_COMMAND');
+  assert.match(startPayload.error.message, /run <task_id>/);
+
+  const resumePayload = parseCliJson(await runCli(['task', 'resume', 'T-001', '--json']));
+  assert.equal(resumePayload.ok, false);
+  assert.equal(resumePayload.error.code, 'INVALID_TASK_COMMAND');
+  assert.match(resumePayload.error.message, /run <task_id>/);
+
   const eventsPayload = parseCliJson(await runCli(['task', 'events', 'T-001', '--json']));
   assert.equal(eventsPayload.ok, false);
   assert.equal(eventsPayload.error.code, 'INVALID_TASK_COMMAND');
@@ -178,6 +206,14 @@ test('removed task diagnostic commands fail fast and point users to the leaner l
   assert.equal(submitReviewPayload.ok, false);
   assert.equal(submitReviewPayload.error.code, 'INVALID_TASK_COMMAND');
   assert.match(submitReviewPayload.error.message, /Use "complete" instead\./);
+});
+
+test('overlay show was merged into ensure', async () => {
+  const payload = parseCliJson(await runCli(['overlay', 'show', '--json']));
+
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, 'INVALID_OVERLAY_COMMAND');
+  assert.match(payload.error.message, /Use "ensure" instead\./);
 });
 
 test('setup in human mode prints a concise success message instead of the full payload', async () => {

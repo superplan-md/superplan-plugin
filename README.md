@@ -24,7 +24,7 @@ The installer:
 - installs `superplan` globally with npm
 - installs the packaged desktop overlay companion for the current macOS or Linux platform when a release artifact is available
 - runs machine-level `superplan setup` automatically so bundled skills are ready immediately
-- asks whether the desktop overlay should be enabled by default on this machine
+- enables the desktop overlay by default on this machine unless `SUPERPLAN_ENABLE_OVERLAY=0` is set
 
 Prerequisites:
 
@@ -56,7 +56,7 @@ Then verify the CLI is available:
 superplan --version
 ```
 
-When the overlay companion is installed and enabled, the first real execution transition in a repo automatically reveals it. In practice, `superplan run`, `superplan task start`, `superplan task resume`, and `superplan task reopen` all surface the overlay when work becomes active. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
+When the overlay companion is installed and enabled, the first real execution transition in a repo automatically reveals it. In practice, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` all surface the overlay when work becomes active. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
 
 To update a normal installed copy later:
 
@@ -203,8 +203,9 @@ The intended runtime loop is:
 ```bash
 superplan status --json
 superplan run --json
-superplan task show <task_id> --json
 ```
+
+Use the task returned by `superplan run --json` directly. Reach for `superplan task show <task_id> --json` only when one task needs deeper detail or readiness reasons. If you need to activate one known task directly, use `superplan run <task_id> --json`.
 
 When you are shaping new work instead of executing existing work, start with:
 
@@ -246,11 +247,10 @@ Current top-level commands:
 | `setup` | Install Superplan config, bundled skills, and the agent integrations you select |
 | `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
 | `update` | Update the installed Superplan CLI and refresh existing skills |
-| `remove` | Remove a Superplan installation, including machine-level CLI installs and the nearest local Superplan workspace it can infer safely |
-| `purge` | Remove Superplan state more aggressively |
+| `remove` | Remove a Superplan installation and state, including machine-level CLI installs and the nearest local Superplan workspace it can infer safely |
 | `doctor` | Validate setup and installation health |
 | `parse` | Parse task contracts and return diagnostics |
-| `run` | Start or continue the next task |
+| `run` | Start, resume, or continue task execution |
 | `status` | Show active, ready, in-review, blocked, and feedback-needed tasks |
 | `task` | Inspect and transition task runtime state, including review handoff |
 

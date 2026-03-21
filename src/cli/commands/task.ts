@@ -73,11 +73,25 @@ interface TaskFixAction {
 
 type TaskLifecycleStatus = 'in_progress' | 'in_review' | 'done' | 'blocked' | 'needs_feedback';
 type TaskSelectionStatus = 'in_progress' | 'ready' | null;
+type TaskActivationAction = 'start' | 'resume' | 'continue';
 
 export type TaskErrorResult = { ok: false; error: { code: string; message: string; retryable: boolean } };
 export type TaskListResult = { ok: true; data: { tasks: ParsedTask[] } } | TaskErrorResult;
 export type TaskSelectionResult =
   | { ok: true; data: { task_id: string | null; status: TaskSelectionStatus; task: ParsedTask | null; reason: string } }
+  | TaskErrorResult;
+export type TaskActivationResult =
+  | {
+      ok: true;
+      data: {
+        task_id: string;
+        status: 'in_progress';
+        task: ParsedTask;
+        action: TaskActivationAction;
+        reason: string;
+        overlay?: OverlayRuntimeNotice;
+      };
+    }
   | TaskErrorResult;
 
 type TaskCommandResult =
@@ -102,8 +116,6 @@ type TaskCommandResult =
     } | {
       task_id: string | null; reason: string;
     } | {
-      events: RuntimeEvent[];
-    } | {
       task_id: string; reset: true;
     } | {
       fixed: boolean; actions: TaskFixAction[];
@@ -117,8 +129,6 @@ type TaskCommandResult =
 const TASK_SUBCOMMANDS = new Set([
   'show',
   'new',
-  'start',
-  'resume',
   'complete',
   'approve',
   'reopen',
@@ -133,6 +143,8 @@ const REMOVED_TASK_SUBCOMMAND_GUIDANCE: Record<string, string> = {
   events: 'No direct replacement in the local MVP loop.',
   list: 'Use "status" for the frontier summary or "show <task_id>" for a specific task.',
   next: 'Use "run" to choose or continue work.',
+  start: 'Use "run <task_id>" instead.',
+  resume: 'Use "run <task_id>" instead.',
   why: 'Use "show <task_id>" instead.',
   'why-next': 'Use "run" to choose work or "status" to inspect the frontier.',
   'submit-review': 'Use "complete" instead.',
@@ -281,16 +293,15 @@ export function getTaskCommandHelpMessage(options: {
     'Task commands:',
     '  show <task_id>               Show one task and its readiness details',
     '  new <change-slug>            Create a new task file in a change',
-    '  start <task_id>              Start a specific ready task',
     '  complete <task_id>           Finish implementation and send the task to review',
     '  approve <task_id>            Approve an in-review task and mark it done',
     '  reopen <task_id>             Move a review or done task back into implementation',
     '  block <task_id> --reason     Pause a task because something external is blocking it',
     '  request-feedback <task_id>   Pause a task because you need user input',
-    '  resume <task_id>             Continue a blocked or feedback task',
     '  fix                          Repair runtime conflicts deterministically',
     '',
     'For a fast start: superplan run',
+    'To run a specific task: superplan run <task_id>',
     '',
     'Some recovery commands still exist but are intentionally hidden from the default help surface.',
     '',
@@ -298,7 +309,7 @@ export function getTaskCommandHelpMessage(options: {
     '  superplan task show T-001',
     '  superplan task --help',
     '  superplan task new improve-task-authoring --title "Add task template"',
-    '  superplan task start T-001',
+    '  superplan run T-001',
     '  superplan task approve T-001',
     '  superplan task block T-001 --reason "Waiting on review"',
   ].join('\n');
@@ -400,7 +411,7 @@ function getPriorityRank(priority: ParsedTask['priority']): number {
   return 2;
 }
 
-function sortTasksByPriorityAndId(left: ParsedTask, right: ParsedTask): number {
+export function sortTasksByPriorityAndId(left: ParsedTask, right: ParsedTask): number {
   const priorityDifference = getPriorityRank(left.priority) - getPriorityRank(right.priority);
   if (priorityDifference !== 0) {
     return priorityDifference;
@@ -764,6 +775,20 @@ async function showTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
+function getActivatedTaskFromResult(
+  result: Extract<TaskCommandResult, { ok: true }>,
+  fallbackTask: ParsedTask,
+): { task: ParsedTask; overlay?: OverlayRuntimeNotice } {
+  const task = 'task' in result.data && result.data.task
+    ? result.data.task
+    : fallbackTask;
+  const overlay = 'overlay' in result.data && result.data.overlay
+    ? result.data.overlay
+    : undefined;
+
+  return { task, overlay };
+}
+
 async function startTask(taskId: string): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
@@ -858,6 +883,7 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
     data: {
       task_id: taskId,
       status: 'in_progress',
+      task: buildRuntimeTaskSnapshot(matchedTask, runtimeState.tasks[taskId]),
       ...(overlay ? { overlay } : {}),
     },
   };
@@ -963,6 +989,105 @@ async function resumeTask(taskId: string): Promise<TaskCommandResult> {
     data: {
       task_id: taskId,
       status: 'in_progress',
+      task: buildRuntimeTaskSnapshot(matchedTask, runtimeState.tasks[taskId]),
+      ...(overlay ? { overlay } : {}),
+    },
+  };
+}
+
+export async function activateTask(taskId: string): Promise<TaskActivationResult> {
+  const mergedTasksResult = await getMergedTasks();
+  if (mergedTasksResult.error) {
+    return mergedTasksResult.error;
+  }
+
+  const matchedTask = mergedTasksResult.tasks!.find(taskItem => taskItem.task_id === taskId);
+  if (!matchedTask) {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_NOT_FOUND',
+        message: 'Task not found',
+        retryable: false,
+      },
+    };
+  }
+
+  if (matchedTask.status === 'in_progress') {
+    const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+    const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
+
+    return {
+      ok: true,
+      data: {
+        task_id: taskId,
+        status: 'in_progress',
+        task: matchedTask,
+        action: 'continue',
+        reason: 'Task is already in progress',
+        ...(overlay ? { overlay } : {}),
+      },
+    };
+  }
+
+  if (matchedTask.status === 'blocked' || matchedTask.status === 'needs_feedback') {
+    const resumeTaskResult = await resumeTask(taskId);
+    if (!resumeTaskResult.ok) {
+      return resumeTaskResult;
+    }
+
+    const { task, overlay } = getActivatedTaskFromResult(resumeTaskResult, matchedTask);
+
+    return {
+      ok: true,
+      data: {
+        task_id: taskId,
+        status: 'in_progress',
+        task,
+        action: 'resume',
+        reason: 'Task was resumed explicitly',
+        ...(overlay ? { overlay } : {}),
+      },
+    };
+  }
+
+  if (matchedTask.status === 'in_review') {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_IN_REVIEW',
+        message: 'Task is in review. Use "task reopen <task_id>" to continue implementation.',
+        retryable: false,
+      },
+    };
+  }
+
+  if (matchedTask.status === 'done') {
+    return {
+      ok: false,
+      error: {
+        code: 'TASK_ALREADY_COMPLETED',
+        message: 'Task is already completed. Use "task reopen <task_id>" to work on it again.',
+        retryable: false,
+      },
+    };
+  }
+
+  const startTaskResult = await startTask(taskId);
+  if (!startTaskResult.ok) {
+    return startTaskResult;
+  }
+
+  const { task, overlay } = getActivatedTaskFromResult(startTaskResult, matchedTask);
+
+  return {
+    ok: true,
+    data: {
+      task_id: taskId,
+      status: 'in_progress',
+      task,
+      action: 'start',
+      reason: 'Task was started explicitly',
       ...(overlay ? { overlay } : {}),
     },
   };
@@ -1269,21 +1394,8 @@ async function reopenTask(taskId: string, reason?: string): Promise<TaskCommandR
     data: {
       task_id: taskId,
       status: 'in_progress',
+      task: buildRuntimeTaskSnapshot(mergedTask, runtimeState.tasks[taskId]),
       ...(overlay ? { overlay } : {}),
-    },
-  };
-}
-
-async function eventsTask(taskId?: string): Promise<TaskCommandResult> {
-  const runtimePaths = getRuntimePaths();
-  const events = await readEvents(runtimePaths.eventsPath);
-
-  return {
-    ok: true,
-    data: {
-      events: taskId
-        ? events.filter(event => event.task_id === taskId)
-        : events,
     },
   };
 }
@@ -1483,14 +1595,6 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
       subcommand,
       requiresTaskId: true,
     });
-  }
-
-  if (subcommand === 'start') {
-    return startTask(taskId);
-  }
-
-  if (subcommand === 'resume') {
-    return resumeTask(taskId);
   }
 
   if (subcommand === 'approve') {

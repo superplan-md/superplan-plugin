@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { confirm, select } from '@inquirer/prompts';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
+import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
 
 interface AgentEnvironment {
   name: string;
@@ -14,7 +15,6 @@ interface AgentEnvironment {
 
 type RemoveScope = 'global' | 'local' | 'both' | 'skip';
 type AgentScope = 'project' | 'global';
-type RemoveMode = 'remove' | 'purge';
 
 export interface RemoveOptions {
   json?: boolean;
@@ -32,7 +32,7 @@ export type RemoveResult =
       ok: true;
       data: {
         scope: RemoveScope;
-        mode: RemoveMode;
+        mode: 'remove';
         removed_paths: string[];
         agents: AgentEnvironment[];
       };
@@ -128,9 +128,12 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
 
 async function getManagedSkillNames(sourceSkillsDir: string): Promise<string[]> {
   const entries = await fs.readdir(sourceSkillsDir, { withFileTypes: true });
-  return entries
-    .filter(entry => entry.isDirectory())
-    .map(entry => entry.name)
+  return [...new Set([
+    ...entries
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name),
+    ...ALL_SUPERPLAN_SKILL_NAMES,
+  ])]
     .sort((left, right) => left.localeCompare(right));
 }
 
@@ -279,7 +282,6 @@ function resolveInstalledCliTargets(
 }
 
 async function removeCommand(
-  mode: RemoveMode,
   options: RemoveOptions,
   deps: Partial<RemoveDeps> = {},
 ): Promise<RemoveResult> {
@@ -289,7 +291,7 @@ async function removeCommand(
         ok: false,
         error: {
           code: 'INTERACTIVE_REQUIRED',
-          message: `${mode} must be run interactively`,
+          message: 'remove must be run interactively',
           retryable: false,
         },
       };
@@ -303,10 +305,9 @@ async function removeCommand(
 
     const globalSuperplanDir = path.join(homeDir, '.config', 'superplan');
     const localSuperplanDir = path.join(localRootDir, '.superplan');
-    const localChangesDir = path.join(localSuperplanDir, 'changes');
 
     const scope = await select<RemoveScope>({
-      message: `Where do you want to ${mode} Superplan?`,
+      message: 'Where do you want to remove Superplan?',
       choices: [
         { name: 'Global (machine-level)', value: 'global' },
         { name: 'Local (current repository)', value: 'local' },
@@ -320,20 +321,20 @@ async function removeCommand(
         ok: true,
         data: {
           scope,
-          mode,
+          mode: 'remove',
           removed_paths: [],
           agents: [],
         },
       };
     }
 
-    const proceed = await confirm({ message: `Proceed with ${mode}?` });
+    const proceed = await confirm({ message: 'Proceed with remove?' });
     if (!proceed) {
       return {
         ok: false,
         error: {
           code: 'USER_ABORTED',
-          message: `${mode} aborted by user`,
+          message: 'remove aborted by user',
           retryable: false,
         },
       };
@@ -366,14 +367,13 @@ async function removeCommand(
     if (scope === 'local' || scope === 'both') {
       await removeAgentInstalls(localAgents, managedSkillNames, removedPaths);
       await removePath(localSuperplanDir, removedPaths);
-      await removePath(localChangesDir, removedPaths);
     }
 
     return {
       ok: true,
       data: {
         scope,
-        mode,
+        mode: 'remove',
         removed_paths: removedPaths,
         agents: [...globalAgents, ...localAgents],
       },
@@ -391,9 +391,5 @@ async function removeCommand(
 }
 
 export async function remove(options: RemoveOptions, deps: Partial<RemoveDeps> = {}): Promise<RemoveResult> {
-  return removeCommand('remove', options, deps);
-}
-
-export async function purge(options: RemoveOptions, deps: Partial<RemoveDeps> = {}): Promise<RemoveResult> {
-  return removeCommand('purge', options, deps);
+  return removeCommand(options, deps);
 }

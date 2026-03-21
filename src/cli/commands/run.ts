@@ -1,11 +1,9 @@
-import { selectNextTask, task, type ParsedTask } from './task';
-import { overlay } from './overlay';
+import { activateTask, selectNextTask, type ParsedTask } from './task';
 import type { OverlayRuntimeNotice } from '../overlay-visibility';
 
 interface RunDeps {
   selectNextTaskFn: typeof selectNextTask;
-  taskFn: typeof task;
-  overlayFn: typeof overlay;
+  activateTaskFn: typeof activateTask;
 }
 
 export type RunResult =
@@ -13,33 +11,72 @@ export type RunResult =
       ok: true;
       data: {
         task_id: string | null;
-        action: 'start' | 'continue' | 'idle';
+        action: 'start' | 'resume' | 'continue' | 'idle';
+        status: 'in_progress' | null;
+        task: ParsedTask | null;
+        reason: string;
         overlay?: OverlayRuntimeNotice;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
-function getOverlayNoticeFromEnsureResult(result: Awaited<ReturnType<typeof overlay>>): OverlayRuntimeNotice | undefined {
-  if (!result.ok || !('requested_action' in result.data) || !result.data.requested_action || !result.data.enabled || !result.data.companion) {
-    return undefined;
-  }
+function getPositionalArgs(args: string[]): string[] {
+  return args.filter(arg => arg !== '--json' && arg !== '--quiet');
+}
 
+function getInvalidRunCommandError(): RunResult {
   return {
-    requested_action: result.data.requested_action,
-    applied_action: result.data.applied_action ?? result.data.requested_action,
-    enabled: result.data.enabled,
-    has_content: result.data.has_content,
-    companion: result.data.companion,
+    ok: false,
+    error: {
+      code: 'INVALID_RUN_COMMAND',
+      message: [
+        'Run accepts at most one optional <task_id>.',
+        '',
+        'Usage:',
+        '  superplan run',
+        '  superplan run <task_id>',
+      ].join('\n'),
+      retryable: true,
+    },
   };
 }
 
-export async function run(deps: Partial<RunDeps> = {}): Promise<RunResult> {
+function buildRunResultFromActivation(activationResult: Awaited<ReturnType<typeof activateTask>>): RunResult {
+  if (!activationResult.ok) {
+    return activationResult;
+  }
+
+  return {
+    ok: true,
+    data: {
+      task_id: activationResult.data.task_id,
+      action: activationResult.data.action,
+      status: activationResult.data.status,
+      task: activationResult.data.task,
+      reason: activationResult.data.reason,
+      ...('overlay' in activationResult.data && activationResult.data.overlay
+        ? { overlay: activationResult.data.overlay }
+        : {}),
+    },
+  };
+}
+
+export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Promise<RunResult> {
   const runtimeDeps: RunDeps = {
     selectNextTaskFn: selectNextTask,
-    taskFn: task,
-    overlayFn: overlay,
+    activateTaskFn: activateTask,
     ...deps,
   };
+  const positionalArgs = getPositionalArgs(args);
+
+  if (positionalArgs.length > 1) {
+    return getInvalidRunCommandError();
+  }
+
+  const explicitTaskId = positionalArgs[0];
+  if (explicitTaskId) {
+    return buildRunResultFromActivation(await runtimeDeps.activateTaskFn(explicitTaskId));
+  }
 
   const nextTaskResult = await runtimeDeps.selectNextTaskFn();
   if (!nextTaskResult.ok) {
@@ -68,43 +105,29 @@ export async function run(deps: Partial<RunDeps> = {}): Promise<RunResult> {
       data: {
         task_id: null,
         action: 'idle',
+        status: null,
         task: null,
         reason: nextTaskResult.data.reason,
       },
     };
   }
 
-  if (nextTaskResult.data.status === 'in_progress') {
-    const overlayResult = await runtimeDeps.overlayFn(['ensure']);
-    const overlayNotice = getOverlayNoticeFromEnsureResult(overlayResult);
-
-    return {
-      ok: true,
-      data: {
-        task_id: nextTaskResult.data.task_id,
-        action: 'continue',
-        ...(overlayNotice ? { overlay: overlayNotice } : {}),
-      },
-    };
-  }
-
-  if (nextTaskResult.data.status === 'ready') {
-    const startTaskResult = await runtimeDeps.taskFn(['start', nextTaskResult.data.task_id]);
-    if (!startTaskResult.ok) {
-      return startTaskResult;
+  if (nextTaskResult.data.status === 'in_progress' || nextTaskResult.data.status === 'ready') {
+    const activationResult = await runtimeDeps.activateTaskFn(nextTaskResult.data.task_id);
+    if (!activationResult.ok) {
+      return activationResult;
     }
 
-    const startedTask = 'task' in startTaskResult.data && startTaskResult.data.task
-      ? startTaskResult.data.task
-      : nextTaskResult.data.task;
-
     return {
       ok: true,
       data: {
-        task_id: nextTaskResult.data.task_id,
-        action: 'start',
-        ...('overlay' in startTaskResult.data && startTaskResult.data.overlay
-          ? { overlay: startTaskResult.data.overlay }
+        task_id: activationResult.data.task_id,
+        action: activationResult.data.action,
+        status: activationResult.data.status,
+        task: activationResult.data.task,
+        reason: nextTaskResult.data.reason,
+        ...('overlay' in activationResult.data && activationResult.data.overlay
+          ? { overlay: activationResult.data.overlay }
           : {}),
       },
     };

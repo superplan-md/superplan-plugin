@@ -4,6 +4,7 @@ import * as path from 'path';
 import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
+import { ALL_ENTRY_SKILL_NAMES } from '../skill-names';
 import { resolveWorkspaceRoot } from '../workspace-root';
 
 interface DoctorIssue {
@@ -74,62 +75,70 @@ async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> 
   }
 }
 
-function getProjectAgents(baseDir: string): { name: string; path: string; skillsPath: string }[] {
+function getSkillsNamespaceCandidates(baseDir: string, ...segments: string[]): string[] {
+  return ALL_ENTRY_SKILL_NAMES.map(skillName => path.join(baseDir, ...segments, skillName));
+}
+
+function getSkillsFileCandidates(baseDir: string, ...segments: string[]): string[] {
+  return ALL_ENTRY_SKILL_NAMES.map(skillName => path.join(baseDir, ...segments, skillName, 'SKILL.md'));
+}
+
+function getProjectAgents(baseDir: string): { name: string; path: string; skillsPaths: string[] }[] {
   return [
     {
       name: 'claude',
       path: path.join(baseDir, '.claude'),
-      skillsPath: path.join(baseDir, '.claude', 'skills', 'using-superplan'),
+      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.claude', 'skills'),
     },
     {
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
-      skillsPath: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+      skillsPaths: [path.join(baseDir, '.gemini', 'commands', 'superplan.toml')],
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
-      skillsPath: path.join(baseDir, '.cursor', 'skills', 'using-superplan'),
+      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.cursor', 'skills'),
     },
     {
       name: 'codex',
       path: path.join(baseDir, '.codex'),
-      skillsPath: path.join(baseDir, '.codex', 'skills', 'using-superplan'),
+      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.codex', 'skills'),
     },
     {
       name: 'opencode',
       path: path.join(baseDir, '.opencode'),
-      skillsPath: path.join(baseDir, '.opencode', 'skills', 'using-superplan'),
+      skillsPaths: getSkillsNamespaceCandidates(baseDir, '.opencode', 'skills'),
     },
   ];
 }
 
-function getGlobalAgents(baseDir: string): { name: string; path: string; skillsPath: string }[] {
+function getGlobalAgents(baseDir: string): { name: string; path: string; skillsPaths: string[] }[] {
   return [
     {
       name: 'claude',
       path: path.join(baseDir, '.claude'),
-      skillsPath: path.join(baseDir, '.claude', 'skills', 'using-superplan', 'SKILL.md'),
+      skillsPaths: getSkillsFileCandidates(baseDir, '.claude', 'skills'),
     },
     {
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
-      skillsPath: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
+      skillsPaths: [path.join(baseDir, '.gemini', 'commands', 'superplan.toml')],
     },
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
-      skillsPath: path.join(baseDir, '.cursor', 'skills', 'using-superplan', 'SKILL.md'),
+      skillsPaths: getSkillsFileCandidates(baseDir, '.cursor', 'skills'),
     },
     {
       name: 'codex',
       path: path.join(baseDir, '.codex'),
-      skillsPath: path.join(baseDir, '.codex', 'skills', 'using-superplan', 'SKILL.md'),
+      skillsPaths: getSkillsFileCandidates(baseDir, '.codex', 'skills'),
     },
     {
       name: 'opencode',
       path: path.join(baseDir, '.config', 'opencode'),
-      skillsPath: path.join(baseDir, '.config', 'opencode', 'skills', 'using-superplan', 'SKILL.md'),
+      skillsPaths: getSkillsFileCandidates(baseDir, '.config', 'opencode', 'skills'),
     },
   ];
 }
@@ -294,7 +303,8 @@ export async function doctor(args: string[] = []) {
     ...getProjectAgents(workspaceRoot),
   ];
   for (const agent of agents) {
-    if (await pathExists(agent.path) && !await pathExists(agent.skillsPath)) {
+    const hasInstalledSkills = (await Promise.all(agent.skillsPaths.map(candidatePath => pathExists(candidatePath)))).some(Boolean);
+    if (await pathExists(agent.path) && !hasInstalledSkills) {
       issues.push({
         code: 'AGENT_SKILLS_MISSING',
         message: `Superplan skills not installed for ${agent.name} agent`,
