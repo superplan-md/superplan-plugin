@@ -56,7 +56,7 @@ Then verify the CLI is available:
 superplan --version
 ```
 
-When the overlay companion is installed and enabled, the first real authoring or execution transition in a repo can reveal it. In practice, `superplan task new`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` can surface the overlay. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
+When the overlay companion is installed and enabled, the first real authoring or execution transition in a repo can reveal it. In practice, `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` can surface the overlay. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
 
 To update a normal installed copy later:
 
@@ -80,7 +80,7 @@ After that bootstrap update, future CLI refreshes can use `superplan update`.
 
 For local source installs, update from the checkout and reinstall explicitly.
 
-If the repo's task files or runtime state changed and you want Superplan to refresh its view of the project without touching installed skills:
+If task files or runtime state were edited outside the normal CLI loop and you want Superplan to reconcile the repo without touching installed skills:
 
 ```bash
 superplan sync --json
@@ -160,8 +160,14 @@ That creates the repo-local Superplan scaffold:
 #### 5. Create your first change and task
 
 ```bash
-superplan change new improve-task-authoring
-superplan task new improve-task-authoring --title "Add authoring scaffold"
+superplan change new improve-task-authoring --json
+superplan task new improve-task-authoring --title "Add authoring scaffold" --json
+```
+
+If you already know several tasks for the same change, use one batch scaffold call instead of repeated single-task calls:
+
+```bash
+printf '%s' '[{"title":"Add authoring scaffold"},{"title":"Add help coverage"}]' | superplan task batch improve-task-authoring --stdin --json
 ```
 
 ## Why Superplan
@@ -194,7 +200,7 @@ Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
 | “Done” often means different things to different people | `complete`, `approve`, and `reopen` make review state explicit |
 | Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
 | Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
-| Planning structure is often handwritten | `superplan change new` and `superplan task new` scaffold the common path |
+| Planning structure is often handwritten | `superplan change new`, `superplan task new`, and `superplan task batch` scaffold the common path |
 
 ## Core Workflow
 
@@ -207,20 +213,33 @@ superplan run --json
 
 Use the task returned by `superplan run --json` directly. Reach for `superplan task show <task_id> --json` only when one task needs deeper detail or readiness reasons. If you need to activate one known task directly, use `superplan run <task_id> --json`.
 
+Canonical agent authoring rule:
+
+- use `superplan change new <change-slug> --json` once per tracked change
+- use `superplan task new <change-slug> --title "..." --json` only when exactly one task should be created now
+- use `superplan task batch --stdin --json` when two or more tasks are ready to be created in one pass
+- prefer commands that already return the needed task payload over extra follow-up calls
+- use the returned payload from `task new` or `task batch` directly instead of immediately calling `task show`
+
 When you are shaping new work instead of executing existing work, start with:
 
 ```bash
-superplan change new <change-slug>
+superplan change new <change-slug> --json
 # shape .superplan/changes/<change-slug>/tasks.md
-superplan task new <change-slug> --title "Describe the first task"
+superplan task new <change-slug> --title "Describe the first task" --json
 ```
 
-Let the main graph breakdown live in `.superplan/changes/<change-slug>/tasks.md` first. Once that structure is ready, mint each executable task contract with `superplan task new` instead of hand-creating `tasks/T-xxx.md`.
+If you are creating more than one task at once after the graph is ready, prefer:
+
+```bash
+printf '%s' '[{"title":"Describe the first task"},{"title":"Describe the second task"}]' | superplan task batch <change-slug> --stdin --json
+```
+
+Let the main graph breakdown live in `.superplan/changes/<change-slug>/tasks.md` first. Once that structure is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks instead of hand-creating `tasks/T-xxx.md`.
 
 Then continue with whichever runtime command matches the situation:
 
 ```bash
-superplan sync --json
 superplan task block <task_id> --reason "..."
 superplan task request-feedback <task_id> --message "..."
 superplan task fix --json
@@ -228,6 +247,8 @@ superplan task complete <task_id> --json
 superplan task approve <task_id> --json
 superplan task reopen <task_id> --reason "..."
 ```
+
+Use `superplan sync --json` only when task files or runtime state changed outside the normal execution loop and you need Superplan to re-parse, repair safe drift, and refresh overlay/runtime state.
 
 Review handoff works like this:
 
@@ -246,12 +267,12 @@ Current top-level commands:
 | Command | What it does |
 | --- | --- |
 | `change` | Create tracked work structure |
-| `init` | Initialize Superplan in the current repo |
+| `init` | Scaffold the repo-local Superplan workspace |
 | `setup` | Install Superplan config, bundled skills, and the agent integrations you select |
-| `sync` | Re-parse tasks, repair safe runtime drift, and refresh repo state |
-| `update` | Update the installed Superplan CLI and refresh existing skills |
-| `remove` | Remove a Superplan installation and state, including machine-level CLI installs and the nearest local Superplan workspace it can infer safely |
-| `doctor` | Validate setup and installation health |
+| `sync` | Re-parse tasks and repair safe runtime drift after task-file or runtime edits |
+| `update` | Update an installed Superplan CLI and refresh existing skills |
+| `remove` | Remove a Superplan installation or state; use `--scope ... --yes --json` for agent-safe deletion |
+| `doctor` | Validate setup, install, and overlay health |
 | `parse` | Parse task contracts and return diagnostics |
 | `run` | Start, resume, or continue task execution |
 | `status` | Show active, ready, in-review, blocked, and feedback-needed tasks |
@@ -307,13 +328,19 @@ Superplan uses markdown task files stored under:
 .superplan/changes/<change-slug>/tasks/T-xxx.md
 ```
 
-Do not hand-create `tasks/T-xxx.md` just to allocate an ID. Shape the graph in `tasks.md` first, then use `superplan task new` to mint the canonical task contract shell.
+Do not hand-create `tasks/T-xxx.md` just to allocate an ID. Shape the graph in `tasks.md` first, then use `superplan task new` for one task or `superplan task batch` for multiple tasks to mint canonical task contract shells.
 
 You can scaffold the common path instead of writing everything by hand:
 
 ```bash
-superplan change new improve-task-authoring
-superplan task new improve-task-authoring --title "Add change scaffolding"
+superplan change new improve-task-authoring --json
+superplan task new improve-task-authoring --title "Add change scaffolding" --json
+```
+
+For multi-task shaping, batch scaffolding is usually faster and produces fewer follow-up CLI calls:
+
+```bash
+printf '%s' '[{"title":"Add change scaffolding"},{"title":"Add help coverage"}]' | superplan task batch improve-task-authoring --stdin --json
 ```
 
 Task IDs are allocated globally across `.superplan/changes/` so dependencies and runtime references stay unambiguous across changes.
@@ -404,8 +431,10 @@ superplan parse --json
 
 - The main CLI help shows the top-level Superplan commands.
 - `superplan task --help` is intentionally narrower and emphasizes the core task loop.
-- `superplan change new` and `superplan task new` create the canonical authoring structure under `.superplan/changes/`.
-- `superplan sync` refreshes Superplan's view of the current repo and does not reinstall skills.
+- `superplan change new`, `superplan task new`, and `superplan task batch` create the canonical authoring structure under `.superplan/changes/`.
+- For agent-first flows, the canonical multi-task authoring path is `superplan task batch --stdin --json`; `--file <path>` is only a fallback when a persisted batch spec is useful.
+- `superplan sync` is a recovery command for task-file edits or runtime drift, not part of the normal `status -> run` loop.
+- `superplan remove` should use `--scope <local|global|both> --yes --json` in agent flows so the destructive intent is explicit.
 - `superplan update` is intended for normal installed copies of the CLI, not local source checkouts, and refreshes skills for existing setups after a successful update.
 - The current system is CLI-first and markdown-first.
 

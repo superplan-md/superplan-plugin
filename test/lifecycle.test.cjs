@@ -43,17 +43,21 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedUsingSuperplanSkill, /superplan run <task_id> --json/);
   assert.match(installedUsingSuperplanSkill, /superplan status --json/);
   assert.match(installedUsingSuperplanSkill, /superplan task show <task_id> --json/);
+  assert.match(installedUsingSuperplanSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task start <task_id> --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task resume <task_id> --json/);
+  assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task batch <change-slug> --file <path> --json/);
 
   const installedShapeSkill = await fs.readFile(
     path.join(sandbox.home, '.claude', 'skills', 'superplan-shape', 'SKILL.md'),
     'utf-8',
   );
   assert.match(installedShapeSkill, /superplan task new <change-slug>/);
+  assert.match(installedShapeSkill, /superplan task batch <change-slug> --stdin --json/);
   assert.match(installedShapeSkill, /tasks\.md/);
+  assert.doesNotMatch(installedShapeSkill, /superplan task batch <change-slug> --file <path> --json/);
 
   const installedExecuteTaskGraphSkill = await fs.readFile(
     path.join(sandbox.home, '.claude', 'skills', 'superplan-execute', 'SKILL.md'),
@@ -301,11 +305,48 @@ test('init quiet requires global setup before repo initialization', async () => 
   });
 });
 
+test('init json requires global setup before repo initialization without prompting', async () => {
+  const sandbox = await makeSandbox('superplan-init-json-required-');
+  const result = await runCli(['init', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const payload = parseCliJson(result);
+
+  assert.equal(result.code, 1);
+  assert.deepEqual(payload, {
+    ok: false,
+    error: {
+      code: 'SETUP_REQUIRED',
+      message: 'Global setup is required before init',
+      retryable: true,
+    },
+  });
+});
+
 test('init quiet creates repository scaffolding after setup is complete', async () => {
   const sandbox = await makeSandbox('superplan-init-quiet-');
 
   await runCli(['setup', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const initResult = await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const payload = parseCliJson(initResult);
+
+  assert.equal(initResult.code, 0);
+  assert.deepEqual(payload, {
+    ok: true,
+    data: {
+      root: '.superplan',
+    },
+    error: null,
+  });
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'config.toml')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'context')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'runtime')));
+  assert.ok(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')));
+});
+
+test('init json creates repository scaffolding after setup is complete without prompting', async () => {
+  const sandbox = await makeSandbox('superplan-init-json-');
+
+  await runCli(['setup', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const initResult = await runCli(['init', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(initResult);
 
   assert.equal(initResult.code, 0);

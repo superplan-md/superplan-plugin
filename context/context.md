@@ -127,13 +127,14 @@ The core execution loop is:
 
 The primary authoring loop is:
 
-- `superplan change new <change-slug>`
-- `superplan task new <change-slug> --title "..."`
+- `superplan change new <change-slug> --json`
+- `superplan task new <change-slug> --title "..." --json`
+- `superplan task batch <change-slug> --stdin --json`
 
 Authoring rule:
 
 - let the main graph breakdown live in `.superplan/changes/<slug>/tasks.md` first
-- once the graph structure is ready, use `superplan task new` to mint each `T-xxx.md` task contract instead of hand-creating task files
+- once the graph structure is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks instead of hand-creating task files
 
 The repo-refresh loop is:
 
@@ -151,9 +152,8 @@ Important runtime commands:
 - `superplan task fix --json`
 - `superplan task complete <task_id> --json`
 - `superplan visibility report --json`
-- `superplan visibility report --json`
 
-Task markdown should not be hand-edited to reflect runtime lifecycle changes, and new `T-xxx.md` contracts should normally be minted with `superplan task new` after `tasks.md` graph structure is ready.
+Task markdown should not be hand-edited to reflect runtime lifecycle changes, and new `T-xxx.md` contracts should normally be minted with `superplan task new` for one task or `superplan task batch` for multiple tasks after `tasks.md` graph structure is ready.
 
 Review handoff now works in two steps:
 
@@ -164,8 +164,8 @@ Review handoff now works in two steps:
 ## Behavioral Notes
 
 - The public product story is centered on planning, task pickup, resumption, and handoff rather than side experiments.
-- `change` and `task new` are the primary authoring helpers for new tracked work.
-- when overlay support is enabled, `task new`, `run`, `run <task_id>`, and `task reopen` can reveal the overlay to keep authoring or execution state visible.
+- `change`, `task new`, and `task batch` are the primary authoring helpers for new tracked work.
+- when overlay support is enabled, `task new`, `task batch`, `run`, `run <task_id>`, and `task reopen` can reveal the overlay to keep authoring or execution state visible.
 - `sync` refreshes Superplan's view of the current repo and does not reinstall skills.
 - `update` refreshes the installed CLI plus any existing global or repo-local skill installs; local source checkouts should still be updated from the checkout and reinstalled explicitly.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.

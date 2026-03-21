@@ -167,8 +167,9 @@ prompt = """
 Use the Superplan CLI in this repository as the source of truth for task state.
 
 Common commands:
-- \`superplan change new <change-slug>\`
-- \`superplan task new <change-slug> --title "Describe the first task"\`
+- \`superplan change new <change-slug> --json\`
+- \`superplan task new <change-slug> --title "<title>" --json\`
+- \`superplan task batch <change-slug> --stdin --json\`
 - \`superplan status --json\`
 - \`superplan run --json\`
 - \`superplan run <task_id> --json\`
@@ -186,8 +187,19 @@ Execution loop:
 2. Claim work with \`superplan run --json\`
 3. Use the task returned by \`superplan run --json\` before editing code; use \`superplan run <task_id> --json\` when one known ready or paused task should become active; reach for \`superplan task show <task_id> --json\` only when you need one task's full details and readiness reasons
 4. Update runtime state with block, feedback, complete, or fix commands instead of editing markdown state by hand
-5. When shaping tracked work, break down the graph in \`.superplan/changes/<change-slug>/tasks.md\` first, then use \`superplan task new\` to mint task files instead of hand-creating \`tasks/T-xxx.md\`
-6. If overlay support is enabled for this workspace, \`superplan task new\`, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
+5. When shaping tracked work, break down the graph in \`.superplan/changes/<change-slug>/tasks.md\` first, then use \`superplan task new\` for one task or \`superplan task batch\` for multiple tasks instead of hand-creating \`tasks/T-xxx.md\`
+6. If overlay support is enabled for this workspace, \`superplan task new\`, \`superplan task batch\`, \`superplan run\`, \`superplan run <task_id>\`, and \`superplan task reopen\` can auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with \`superplan doctor --json\` and \`superplan overlay ensure --json\` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use \`superplan overlay hide --json\` when it becomes idle or empty
+
+Authoring rule:
+- Use \`superplan change new <change-slug> --json\` once per tracked change
+- Use \`superplan task new <change-slug> --title "<title>" --json\` only when exactly one task should be created now
+- Use \`superplan task batch --stdin --json\` when two or more tasks are ready to be created in one pass
+- Prefer stdin over temp files in agent flows
+- Use the returned task payloads directly after authoring instead of immediately calling \`superplan task show\`
+
+Canonical selection rule:
+- Prefer the one canonical command for the intent instead of choosing among overlapping alternatives
+- Prefer commands that already return the needed task payload instead of making extra follow-up calls
 
 Never write \`.superplan/runtime/overlay.json\` by hand.
 """`;
