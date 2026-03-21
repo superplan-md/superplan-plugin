@@ -56,7 +56,7 @@ Then verify the CLI is available:
 superplan --version
 ```
 
-When the overlay companion is installed and enabled, the first real execution transition in a repo automatically reveals it. In practice, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` all surface the overlay when work becomes active. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
+When the overlay companion is installed and enabled, the first real authoring or execution transition in a repo can reveal it. In practice, `superplan task new`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` can surface the overlay. Explicit `superplan overlay ensure` / `hide` commands still exist for manual control and agent guidance.
 
 To update a normal installed copy later:
 
@@ -211,8 +211,11 @@ When you are shaping new work instead of executing existing work, start with:
 
 ```bash
 superplan change new <change-slug>
+# shape .superplan/changes/<change-slug>/tasks.md
 superplan task new <change-slug> --title "Describe the first task"
 ```
+
+Let the main graph breakdown live in `.superplan/changes/<change-slug>/tasks.md` first. Once that structure is ready, mint each executable task contract with `superplan task new` instead of hand-creating `tasks/T-xxx.md`.
 
 Then continue with whichever runtime command matches the situation:
 
@@ -253,13 +256,48 @@ Current top-level commands:
 | `run` | Start, resume, or continue task execution |
 | `status` | Show active, ready, in-review, blocked, and feedback-needed tasks |
 | `task` | Inspect and transition task runtime state, including review handoff |
+| `overlay` | Inspect or control the desktop overlay companion |
+| `visibility` | Inspect run visibility and health evidence |
 
 Task-specific help is available via:
 
 ```bash
 superplan task --help
 superplan change --help
+superplan visibility --help
 ```
+
+## Visibility Reports
+
+The visibility program keeps workflow evidence local to the repo.
+
+Core command:
+
+```bash
+superplan visibility report --json
+```
+
+That command:
+
+- groups enriched runtime events into the current or latest run
+- writes repo-local reports under `.superplan/runtime/reports/`
+- includes doctor/runtime health and overlay visibility signals
+- keeps older minimal event logs readable through a `legacy-history` fallback
+
+Current report inputs and artifacts:
+
+- `.superplan/runtime/events.ndjson`
+- `.superplan/runtime/session.json`
+- `.superplan/runtime/reports/latest.json`
+- `.superplan/runtime/reports/<run_id>.json`
+
+For internal paired examples that contrast Superplan with raw Claude Code:
+
+```bash
+npm run visibility:examples
+```
+
+That script writes curated markdown and JSON examples under `docs/examples/visibility/`.
 
 ## Task Contracts
 
@@ -268,6 +306,8 @@ Superplan uses markdown task files stored under:
 ```text
 .superplan/changes/<change-slug>/tasks/T-xxx.md
 ```
+
+Do not hand-create `tasks/T-xxx.md` just to allocate an ID. Shape the graph in `tasks.md` first, then use `superplan task new` to mint the canonical task contract shell.
 
 You can scaffold the common path instead of writing everything by hand:
 
@@ -326,6 +366,7 @@ Key areas:
 - `.superplan/changes/`: repo-local task artifacts
 - `.superplan/context/`: durable workspace context
 - `.superplan/runtime/`: task runtime state and events
+- `docs/examples/visibility/`: generated Superplan-vs-raw comparison examples
 
 ## Development
 
@@ -335,6 +376,7 @@ Install, build, and test:
 npm install
 npm run build
 npm test
+npm run visibility:examples
 ```
 
 Focused verification is often faster while iterating:

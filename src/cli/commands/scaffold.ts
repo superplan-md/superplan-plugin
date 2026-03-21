@@ -12,6 +12,8 @@ export interface ChangePaths {
   tasksIndexPath: string;
 }
 
+const CHANGE_TASKS_INDEX_PLACEHOLDER_LINE = '- Shape the graph here first, then mint executable tasks with `superplan task new`.';
+
 export async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -56,7 +58,7 @@ export function buildChangeTasksIndex(changeSlug: string, title: string): string
     '',
     '## Tasks',
     '',
-    '- Add task entries as work is shaped.',
+    CHANGE_TASKS_INDEX_PLACEHOLDER_LINE,
     '',
   ].join('\n');
 }
@@ -136,9 +138,8 @@ export async function appendTaskEntryToIndex(
     return;
   }
 
-  const placeholderLine = '- Add task entries as work is shaped.';
-  const nextContent = currentContent.includes(placeholderLine)
-    ? currentContent.replace(placeholderLine, taskLine)
+  const nextContent = currentContent.includes(CHANGE_TASKS_INDEX_PLACEHOLDER_LINE)
+    ? currentContent.replace(CHANGE_TASKS_INDEX_PLACEHOLDER_LINE, taskLine)
     : `${currentContent.trimEnd()}\n${taskLine}\n`;
 
   await fs.writeFile(tasksIndexPath, nextContent, 'utf-8');

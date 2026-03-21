@@ -221,8 +221,10 @@ Lifecycle task
     .map(line => JSON.parse(line).type);
   assert.deepEqual(eventTypes, [
     'task.started',
+    'overlay.ensure',
     'task.blocked',
     'task.resumed',
+    'overlay.ensure',
     'task.feedback_requested',
     'task.reset',
   ]);

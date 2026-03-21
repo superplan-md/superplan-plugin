@@ -1,0 +1,38 @@
+{
+  "id": "needs-feedback-handoff",
+  "title": "Needs Feedback Handoff",
+  "prompt": "Stop safely when a requirement is ambiguous and surface exactly what the user needs to answer.",
+  "superplan": {
+    "artifacts": [
+      "task request-feedback records an explicit needs-feedback transition.",
+      "The report marks the run as waiting on user input instead of merely idle.",
+      "Overlay and runtime state can surface the handoff separately from normal progress."
+    ],
+    "visibility_gains": [
+      "The user-facing blocker is explicit and durable.",
+      "Feedback latency can be measured after the run.",
+      "Later agents can tell whether work paused intentionally or drifted."
+    ]
+  },
+  "baseline": {
+    "mode": "raw_claude_code",
+    "visibility_gaps": [
+      "Clarification requests blend into normal chat traffic.",
+      "There is no durable wait-state separate from conversation noise.",
+      "Later review cannot tell whether the pause was intentional or accidental."
+    ]
+  },
+  "measured_deltas": [
+    {
+      "signal": "Pause classification",
+      "superplan": "Explicit needs-feedback state",
+      "baseline": "Only implied by prose"
+    },
+    {
+      "signal": "User wait time",
+      "superplan": "Derivable from runtime timestamps",
+      "baseline": "Not measurable without manual annotation"
+    }
+  ],
+  "conclusion": "Superplan turns ambiguity into a first-class workflow state instead of burying it inside the transcript."
+}

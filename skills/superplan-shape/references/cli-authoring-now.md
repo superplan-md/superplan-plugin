@@ -21,6 +21,7 @@ But the current CLI does **not** parse or validate `tasks.md` yet.
 Today, the executable surface is narrower:
 
 - `superplan init` creates `.superplan/` and `.superplan/changes/`
+- `superplan task new <change-slug> --title "..."` mints a task contract shell and appends a task entry to `tasks.md`
 - `superplan parse [path] --json` parses task contract markdown files
 - `superplan status`, `superplan run`, `superplan task show <task_id>`, and `superplan task complete` operate on parsed task files plus runtime state
 - `superplan doctor` checks installation and setup, not shaped work
@@ -28,6 +29,7 @@ Today, the executable surface is narrower:
 So shape work like this:
 
 - author `tasks.md` only when graph visibility adds supervision value
+- once the graph in `tasks.md` is ready, use `superplan task new` to mint the `T-xxx.md` task contracts
 - keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`
 - validate task contracts with `superplan parse`
 - inspect readiness with `superplan task`
@@ -37,9 +39,9 @@ So shape work like this:
 
 1. Run `superplan init` if the repo is not initialized.
 2. Create `.superplan/changes/<slug>/`.
-3. Create `.superplan/changes/<slug>/tasks/`.
-4. Optionally create `.superplan/changes/<slug>/tasks.md` as the human graph/index.
-5. Create one `T-xxx.md` file per executable task.
+3. Create or refine `.superplan/changes/<slug>/tasks.md` as the human graph/index.
+4. Once the graph structure is ready, run `superplan task new <change-slug> --title "..."` for each executable task instead of hand-creating `tasks/T-xxx.md`.
+5. Fill in the command-created task contracts until each one matches the intended task contract shape.
 6. Run `superplan parse --json .superplan/changes/<slug>`.
 7. Fix diagnostics until each executable task is valid.
 8. Use `superplan status` to confirm the ready frontier and `superplan task show <task_id>` when one task needs deeper inspection.

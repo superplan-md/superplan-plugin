@@ -98,6 +98,7 @@ Product target:
 Current CLI reality:
 
 - `superplan init` creates `.superplan/` and `.superplan/changes/`
+- `superplan task new <change-slug> --title "..."` mints a task contract shell and appends its task entry to `tasks.md`
 - `superplan parse [path] --json` parses task contract files, not `tasks.md`
 - `superplan status` summarizes the ready frontier from task files plus runtime state
 - `superplan task show <task_id>` explains one task's current readiness in detail
@@ -107,6 +108,7 @@ Therefore:
 
 - for tracked work, author root `tasks.md` according to the hard contract even though the current CLI does not yet validate that layer
 - when Superplan is staying out, do not create graph artifacts
+- once the root graph is ready, use `superplan task new` to mint each executable task contract instead of hand-creating new `tasks/T-xxx.md` files
 - keep current executable truth in task contract files the CLI can parse today
 - choose current CLI validation commands explicitly during shaping
 - distinguish current CLI commands from future CLI hooks
@@ -159,6 +161,7 @@ For tiny tracked work, keep the graph minimal:
 
 - one root `tasks.md`
 - one task entry
+- one `superplan task new` task contract shell
 - no explicit workstream grouping unless grouping materially helps
 
 For large tracked work, shape the graph according to the hard contract:
@@ -187,6 +190,7 @@ Treat the workspace's existing setup as the default operating surface.
 - create `plan.md` plus tasks for `slice` when sequencing matters
 - create specs when misunderstanding the target is a bigger risk than sequencing
 - create `changes/<slug>/tasks.md` as a human graph/index when dependency visibility is useful
+- use `superplan task new` to mint task-contract shells after graph structure is ready
 - create a richer graph, plan, spec, and task set for `program` when the work genuinely needs all layers
 - classify sub-work as `parallel-safe`, `serial`, or `wait-for-clarity`
 - create investigation or uncertainty-reduction tasks
@@ -220,6 +224,7 @@ Treat the workspace's existing setup as the default operating surface.
 - turning specs into pseudocode by default
 - performing broad execution here
 - creating tracked work without a root `changes/<slug>/tasks.md`
+- hand-creating new `tasks/T-xxx.md` task contracts when `superplan task new` can mint the canonical ID and scaffold
 - authoring root graphs or shard files without the hard-contract section shape
 - inventing unstable IDs or renumbering existing task IDs
 - putting canonical dependency or workstream ownership in task files once graph truth exists

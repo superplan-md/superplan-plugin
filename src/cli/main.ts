@@ -3,6 +3,7 @@ import { routeCommand, router } from './router';
 import { getChangeCommandHelpMessage } from './commands/change';
 import { getTaskCommandHelpMessage } from './commands/task';
 import { getOverlayCommandHelpMessage } from './commands/overlay';
+import { getVisibilityCommandHelpMessage } from './commands/visibility';
 
 const { version } = require('../../package.json') as { version: string };
 
@@ -45,6 +46,7 @@ Commands:
   status      Show current task status summary
   task        Task runtime and review operations
   overlay     Overlay companion operations
+  visibility  Inspect run visibility and health evidence
 
 Options:
   -v, --version  Show CLI version
@@ -109,6 +111,22 @@ async function main() {
 
   if (command === 'change' && (args.includes('--help') || args[1] === 'help')) {
     const helpText = getChangeCommandHelpMessage({});
+    if (json || quiet) {
+      printJsonResult({
+        ok: true,
+        data: {
+          help: helpText,
+        },
+        error: null,
+      });
+    } else {
+      console.log(helpText);
+    }
+    return;
+  }
+
+  if (command === 'visibility' && (args.includes('--help') || args[1] === 'help')) {
+    const helpText = getVisibilityCommandHelpMessage({});
     if (json || quiet) {
       printJsonResult({
         ok: true,

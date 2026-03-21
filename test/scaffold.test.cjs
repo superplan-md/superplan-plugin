@@ -42,6 +42,7 @@ test('change new creates a canonical change skeleton', async () => {
   assert.match(tasksIndexContent, /# Improve Planning/);
   assert.match(tasksIndexContent, /- Change ID: `improve-planning`/);
   assert.match(tasksIndexContent, /## Tasks/);
+  assert.match(tasksIndexContent, /Shape the graph here first, then mint executable tasks with `superplan task new`\./);
 });
 
 test('change new from a nested repo directory uses the repo-root superplan workspace', async () => {

@@ -75,7 +75,7 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
 
   const explicitTaskId = positionalArgs[0];
   if (explicitTaskId) {
-    return buildRunResultFromActivation(await runtimeDeps.activateTaskFn(explicitTaskId));
+    return buildRunResultFromActivation(await runtimeDeps.activateTaskFn(explicitTaskId, 'run'));
   }
 
   const nextTaskResult = await runtimeDeps.selectNextTaskFn();
@@ -113,7 +113,7 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
   }
 
   if (nextTaskResult.data.status === 'in_progress' || nextTaskResult.data.status === 'ready') {
-    const activationResult = await runtimeDeps.activateTaskFn(nextTaskResult.data.task_id);
+    const activationResult = await runtimeDeps.activateTaskFn(nextTaskResult.data.task_id, 'run');
     if (!activationResult.ok) {
       return activationResult;
     }

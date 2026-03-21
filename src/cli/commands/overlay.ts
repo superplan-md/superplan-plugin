@@ -13,6 +13,7 @@ import {
   hasRenderableSnapshotContent,
 } from '../overlay-visibility';
 import type { OverlayCompanionLaunchResult } from '../overlay-companion';
+import { recordVisibilityEvent } from '../visibility-runtime';
 
 type OverlayRequestedAction = 'ensure' | 'hide';
 type OverlaySubcommand = 'ensure' | 'hide' | 'enable' | 'disable' | 'status';
@@ -125,6 +126,14 @@ async function ensureOverlay(): Promise<OverlayResult> {
 
   const { paths, snapshot } = await refreshOverlaySnapshot(tasksResult.data.tasks);
   const visibility = await applyRequestedOverlayAction(requestedAction, snapshot);
+  await recordVisibilityEvent({
+    type: 'overlay.ensure',
+    command: 'overlay ensure',
+    workflowPhase: 'overlay',
+    outcome: visibility.enabled && !visibility.companion.launched ? 'error' : 'success',
+    detailCode: visibility.enabled ? visibility.companion.reason ?? 'shown' : 'disabled',
+    startRun: false,
+  });
 
   return {
     ok: true,
@@ -152,6 +161,14 @@ async function hideOverlay(): Promise<OverlayResult> {
     setOverlayVisibilityRequest('hide'),
     readOverlayPreferences(),
   ]);
+  await recordVisibilityEvent({
+    type: 'overlay.hide',
+    command: 'overlay hide',
+    workflowPhase: 'overlay',
+    outcome: 'success',
+    detailCode: 'hidden',
+    startRun: false,
+  });
 
   return {
     ok: true,

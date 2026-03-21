@@ -1,0 +1,38 @@
+{
+  "id": "review-reopen-correction",
+  "title": "Review Reopen Correction",
+  "prompt": "Send work to review, discover a gap, and reopen it with a durable correction trail.",
+  "superplan": {
+    "artifacts": [
+      "task complete, approve, and reopen create an explicit review trail.",
+      "The report separates review health from implementation progress.",
+      "Reopen counts and correction loops remain visible after the run closes."
+    ],
+    "visibility_gains": [
+      "Review is a tracked handoff, not just a chat message.",
+      "Correction loops are measurable instead of anecdotal.",
+      "The final report can distinguish clean approval from late review failures."
+    ]
+  },
+  "baseline": {
+    "mode": "raw_claude_code",
+    "visibility_gaps": [
+      "Review and correction steps blur into one conversation timeline.",
+      "There is no durable reopen signal for later analysis.",
+      "Late failures are easy to miss when reading only the final diff."
+    ]
+  },
+  "measured_deltas": [
+    {
+      "signal": "Review state",
+      "superplan": "Explicit in_review and reopened lifecycle",
+      "baseline": "Conversation-only and easy to flatten"
+    },
+    {
+      "signal": "Late failure visibility",
+      "superplan": "Captured in review/reopen counts",
+      "baseline": "Requires manual post-hoc reading"
+    }
+  ],
+  "conclusion": "Superplan makes late review failures visible as workflow evidence rather than post-hoc narrative."
+}

@@ -31,6 +31,7 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-handoff', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-docs', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
+  assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-shape', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-release', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-docs', 'SKILL.md')));
 
@@ -46,6 +47,13 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task why-next --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task start <task_id> --json/);
   assert.doesNotMatch(installedUsingSuperplanSkill, /superplan task resume <task_id> --json/);
+
+  const installedShapeSkill = await fs.readFile(
+    path.join(sandbox.home, '.claude', 'skills', 'superplan-shape', 'SKILL.md'),
+    'utf-8',
+  );
+  assert.match(installedShapeSkill, /superplan task new <change-slug>/);
+  assert.match(installedShapeSkill, /tasks\.md/);
 
   const installedExecuteTaskGraphSkill = await fs.readFile(
     path.join(sandbox.home, '.claude', 'skills', 'superplan-execute', 'SKILL.md'),

@@ -10,6 +10,7 @@ import { sync } from "./commands/sync";
 import { status } from "./commands/status";
 import { overlay } from "./commands/overlay";
 import { update } from "./commands/update";
+import { visibility } from "./commands/visibility";
 
 type CommandOptions = {
   json: boolean;
@@ -74,6 +75,7 @@ export const router: Record<string, CommandHandler> = {
   task: async (args) => task(args),
   overlay: async (args) => overlay(args),
   update: async (_args, options) => update(options),
+  visibility: async (args) => visibility(args),
 };
 
 export async function routeCommand(args: string[]) {

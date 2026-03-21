@@ -33,6 +33,7 @@ test('cli without a command shows the main Superplan command list', async () => 
   assert.match(result.stdout, /remove\s+Remove Superplan installation and state/);
   assert.match(result.stdout, /status\s+Show current task status summary/);
   assert.match(result.stdout, /task\s+Task runtime and review operations/);
+  assert.match(result.stdout, /visibility\s+Inspect run visibility and health evidence/);
   assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
   assert.doesNotMatch(result.stdout, /popup\s+Open or refocus the current task popup/);
   assert.doesNotMatch(result.stdout, /\bpurge\b/);
@@ -110,13 +111,14 @@ test('task --help explains task subcommands explicitly', async () => {
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Task commands:/);
-  assert.match(result.stdout, /new <change-slug>\s+Create a new task file in a change/);
+  assert.match(result.stdout, /new <change-slug>\s+Create a new task contract in a change/);
   assert.match(result.stdout, /show <task_id>\s+Show one task and its readiness details/);
   assert.match(result.stdout, /complete <task_id>\s+Finish implementation and send the task to review/);
   assert.match(result.stdout, /approve <task_id>\s+Approve an in-review task and mark it done/);
   assert.match(result.stdout, /reopen <task_id>\s+Move a review or done task back into implementation/);
   assert.match(result.stdout, /block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run/);
+  assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, then mint task contracts with superplan task new/i);
   assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bresume <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bcurrent\b/);

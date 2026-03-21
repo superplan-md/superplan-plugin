@@ -181,6 +181,59 @@ Enable overlay
   assert.equal(ensurePayload.data.enabled, true);
 });
 
+test('task new auto-launches the overlay companion when overlay is enabled', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-task-new-');
+  const overlayOutputPath = path.join(sandbox.root, 'overlay-task-new.txt');
+  const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
+
+  await writeFile(fakeOverlayPath, `#!/bin/sh
+printf '%s\n' "$*" > "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
+printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
+`);
+  await fs.chmod(fakeOverlayPath, 0o755);
+  await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
+
+  parseCliJson(await runCli(['change', 'new', 'shape-spec', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+  parseCliJson(await runCli(['overlay', 'enable', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+
+  const createPayload = parseCliJson(await runCli([
+    'task',
+    'new',
+    'shape-spec',
+    '--title',
+    'Break down the main spec graph',
+    '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: {
+      ...sandbox.env,
+      SUPERPLAN_OVERLAY_BINARY_PATH: fakeOverlayPath,
+      SUPERPLAN_OVERLAY_TEST_OUTPUT: overlayOutputPath,
+    },
+  }));
+  const realWorkspacePath = await fs.realpath(sandbox.cwd);
+  const launchOutput = await waitForFile(overlayOutputPath);
+  const snapshot = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
+  const control = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
+
+  assert.equal(createPayload.ok, true);
+  assert.equal(createPayload.data.task_id, 'T-001');
+  assert.equal(createPayload.data.change_id, 'shape-spec');
+  assert.equal(createPayload.data.overlay.requested_action, 'ensure');
+  assert.equal(createPayload.data.overlay.enabled, true);
+  assert.equal(createPayload.data.overlay.companion.launched, true);
+  assert.equal(createPayload.data.overlay.companion.executable_path, fakeOverlayPath);
+  assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.equal(control.requested_action, 'ensure');
+  assert.equal(control.visible, true);
+  assert.equal(snapshot.active_task, null);
+  assert.equal(snapshot.board.backlog[0].task_id, 'T-001');
+  assert.equal(snapshot.board.backlog[0].title, 'Break down the main spec graph');
+});
+
 test('run with an explicit task id honors the global overlay setting when local workspace config is missing', async () => {
   const sandbox = await makeSandbox('superplan-overlay-global-fallback-');
 
@@ -391,15 +444,12 @@ Launch overlay companion app bundle
       SUPERPLAN_OVERLAY_APP_PATH: fakeAppPath,
     },
   }));
-  const realWorkspacePath = await fs.realpath(sandbox.cwd);
-  const launchOutput = await waitForFile(overlayOutputPath, 5000);
 
   assert.equal(ensurePayload.ok, true);
   assert.equal(ensurePayload.data.applied_action, 'ensure');
   assert.equal(ensurePayload.data.companion.attempted, true);
   assert.equal(ensurePayload.data.companion.launched, true);
   assert.equal(ensurePayload.data.companion.install_path, fakeAppPath);
-  assert.match(launchOutput, new RegExp(`--workspace ${realWorkspacePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
 });
 
 test('run with an explicit task id auto-launches the overlay companion when overlay is enabled', async () => {

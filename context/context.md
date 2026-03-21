@@ -21,12 +21,14 @@ The current documented top-level command surface is:
 - `sync`
 - `update`
 - `remove`
-- `purge`
 - `doctor`
 - `parse`
 - `run`
 - `status`
 - `task`
+- `overlay`
+- `visibility`
+- `visibility`
 
 ## Installation
 
@@ -59,11 +61,16 @@ Important install note:
 - `src/cli/commands/task.ts`: Implements task inspection, scaffolding, selection, readiness explanation, runtime transitions, and deterministic runtime repair.
 - `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop.
 - `src/cli/commands/status.ts`: Returns active, ready, blocked, and feedback-needed task summaries.
+- `src/cli/commands/visibility.ts`: Builds repo-local visibility reports for the active or latest run.
+- `src/cli/visibility-runtime.ts`: Owns run session tracking, enriched runtime events, and report generation.
 - `skills/`: Bundled workflow skills copied into `dist/skills` during build.
 - `test/`: Node built-in test suite for CLI, parser, lifecycle, task, and removal behavior.
 - `.superplan/runtime/tasks.json`: Runtime state store.
-- `.superplan/runtime/events.ndjson`: Append-only task lifecycle event log.
+- `.superplan/runtime/events.ndjson`: Append-only runtime event log with per-run visibility metadata.
+- `.superplan/runtime/session.json`: Active or latest run boundary metadata for visibility reporting.
+- `.superplan/runtime/reports/`: Repo-local run summaries written by `superplan visibility report`.
 - `.superplan/changes/`: Canonical location for task artifacts in this repo.
+- `docs/examples/visibility/`: Generated paired examples contrasting Superplan with raw Claude Code.
 - `README.md`: Public-facing project documentation.
 
 ## Command Guidelines
@@ -75,11 +82,12 @@ Important install note:
 - `--json` is the primary automation mode.
 - Human-mode `setup` now prints a concise success message instead of the full structured payload.
 - Local-scope CLI commands now resolve the nearest repo workspace root, so running from `apps/...` reuses the repo-level `.superplan/` instead of creating nested local workspaces.
+- `visibility report` is the local-first evidence surface for workflow impact; it writes stable report artifacts under `.superplan/runtime/reports/`.
 
 ## Task Storage And Parsing
 
 - Default parsing path is `.superplan/changes`, not repo-root `changes/`.
-- Task contracts live at `.superplan/changes/<slug>/tasks/T-xxx.md`.
+- Task contracts live at `.superplan/changes/<slug>/tasks/T-xxx.md` and should normally be minted with `superplan task new` after the owning `tasks.md` graph is shaped.
 - Task IDs are allocated globally across `.superplan/changes/`, not restarted per change.
 - Parsed tasks currently rely on frontmatter such as:
   - `task_id`
@@ -107,7 +115,9 @@ Current parse diagnostics include:
 Runtime truth is stored under `.superplan/runtime/`.
 
 - `tasks.json` stores merged execution state such as `in_progress`, `in_review`, `done`, `blocked`, and `needs_feedback`
-- `events.ndjson` stores append-only lifecycle events
+- `events.ndjson` stores append-only runtime events with `run_id`, command, workflow phase, source, and outcome metadata when available
+- `session.json` stores the active or latest run boundary used for visibility reports
+- `reports/latest.json` and `reports/<run_id>.json` store derived run summaries
 
 The core execution loop is:
 
@@ -119,6 +129,11 @@ The primary authoring loop is:
 
 - `superplan change new <change-slug>`
 - `superplan task new <change-slug> --title "..."`
+
+Authoring rule:
+
+- let the main graph breakdown live in `.superplan/changes/<slug>/tasks.md` first
+- once the graph structure is ready, use `superplan task new` to mint each `T-xxx.md` task contract instead of hand-creating task files
 
 The repo-refresh loop is:
 
@@ -135,8 +150,10 @@ Important runtime commands:
 - `superplan task reopen <task_id> --reason "..."`
 - `superplan task fix --json`
 - `superplan task complete <task_id> --json`
+- `superplan visibility report --json`
+- `superplan visibility report --json`
 
-Task markdown should not be hand-edited to reflect runtime lifecycle changes.
+Task markdown should not be hand-edited to reflect runtime lifecycle changes, and new `T-xxx.md` contracts should normally be minted with `superplan task new` after `tasks.md` graph structure is ready.
 
 Review handoff now works in two steps:
 
@@ -148,6 +165,7 @@ Review handoff now works in two steps:
 
 - The public product story is centered on planning, task pickup, resumption, and handoff rather than side experiments.
 - `change` and `task new` are the primary authoring helpers for new tracked work.
+- when overlay support is enabled, `task new`, `run`, `run <task_id>`, and `task reopen` can reveal the overlay to keep authoring or execution state visible.
 - `sync` refreshes Superplan's view of the current repo and does not reinstall skills.
 - `update` refreshes the installed CLI plus any existing global or repo-local skill installs; local source checkouts should still be updated from the checkout and reinstalled explicitly.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.
@@ -159,6 +177,7 @@ Review handoff now works in two steps:
 
 - `npm run build` compiles TypeScript and copies bundled skills.
 - `npm test` runs the Node built-in test suite.
+- `npm run visibility:examples` writes the curated Superplan-vs-raw comparison examples under `docs/examples/visibility/`.
 - Focused verification is often faster with `node --test <file>`.
 
 ## Durable Repo Quirks

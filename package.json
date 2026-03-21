@@ -17,7 +17,8 @@
     "overlay:package": "node ./scripts/overlay-release.js package",
     "overlay:release": "npm --prefix apps/overlay-desktop run tauri build && node ./scripts/overlay-release.js package",
     "start": "node ./dist/cli/main.js",
-    "test": "npm run build && node --test test/*.test.cjs"
+    "test": "npm run build && node --test test/*.test.cjs",
+    "visibility:examples": "node ./scripts/visibility-scenarios.js"
   },
   "dependencies": {
     "@inquirer/prompts": "^4.0.0"

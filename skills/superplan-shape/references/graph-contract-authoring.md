@@ -15,6 +15,8 @@ When Superplan is engaged and the work is being tracked, author a root graph art
 
 Only the `stay_out` path should avoid creating graph truth.
 
+Once the graph structure is ready, mint executable task contracts with `superplan task new` instead of hand-creating new `tasks/T-xxx.md` files just to allocate task IDs.
+
 ## Root Graph Shape
 
 `changes/<slug>/tasks.md` is the canonical root graph/index artifact.

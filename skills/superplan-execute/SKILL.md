@@ -230,7 +230,7 @@ Use the runtime-aware CLI as the scheduler:
 5. `superplan task request-feedback <task_id> --message "<message>" --json` when user input is required
 6. `superplan task complete <task_id> --json` only after the task contract is actually satisfied
 7. `superplan task fix --json` if runtime state becomes inconsistent
-8. if overlay support is enabled for the workspace, expect `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay as work becomes active; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
+8. if overlay support is enabled for the workspace, expect `superplan task new`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay as work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
 
 ## Decision And Gotcha Rules
 

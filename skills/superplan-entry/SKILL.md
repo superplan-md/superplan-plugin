@@ -101,6 +101,8 @@ When Superplan is active in a repo, prefer the CLI as the execution control plan
 
 Common commands:
 
+- `superplan change new <change-slug>` to create the tracked change skeleton
+- `superplan task new <change-slug> --title "Describe the first task"` to mint a task contract after the graph is ready
 - `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
 - `superplan run --json` to claim the next ready task or continue the active task, with the chosen task contract and selection reason in the payload
 - `superplan run <task_id> --json` to explicitly start or resume one known task
@@ -112,6 +114,7 @@ Common commands:
 - `superplan doctor --json` to verify setup and overlay launchability on a fresh machine or after install/update
 - `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
 - `superplan overlay hide --json` to close the overlay when the workspace is idle or empty
+- when shaping tracked work, let the main graph breakdown live in `.superplan/changes/<slug>/tasks.md` first, then use `superplan task new` to mint task contracts instead of hand-creating `tasks/T-xxx.md`
 
 Execution default:
 
@@ -120,7 +123,7 @@ Execution default:
 3. use the task returned by `superplan run --json`; use `superplan run <task_id> --json` when one specific task should become active; only call `superplan task show <task_id> --json` when you need one task's full details and readiness reasons
 4. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
 5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
-6. if overlay support is enabled for the workspace, expect `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay when work becomes active; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+6. if overlay support is enabled for the workspace, expect `superplan task new`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
 
 ## Entry Decision Order
 

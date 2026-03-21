@@ -19,6 +19,7 @@ import {
   pathExists,
   type ScaffoldPriority,
 } from './scaffold';
+import { recordVisibilityEvent } from '../visibility-runtime';
 
 interface AcceptanceCriterion {
   text: string;
@@ -222,13 +223,76 @@ async function appendEvent(
     | 'task.resumed'
     | 'task.reset',
   taskId: string,
+  options: {
+    command?: string;
+    workflowPhase?: 'execution' | 'feedback' | 'review' | 'runtime' | 'overlay';
+    outcome?: 'success' | 'error';
+    detailCode?: string;
+    reasonCode?: string;
+    startRun?: boolean;
+  } = {},
 ): Promise<void> {
-  await fs.mkdir(path.dirname(eventsPath), { recursive: true });
-  await fs.appendFile(eventsPath, `${JSON.stringify({
-    ts: Date.now(),
+  const defaultCommand = (() => {
+    switch (type) {
+      case 'task.started':
+        return 'task start';
+      case 'task.complete_failed':
+      case 'task.review_requested':
+        return 'task complete';
+      case 'task.approved':
+        return 'task approve';
+      case 'task.reopened':
+        return 'task reopen';
+      case 'task.blocked':
+        return 'task block';
+      case 'task.feedback_requested':
+        return 'task request-feedback';
+      case 'task.resumed':
+        return 'task resume';
+      case 'task.reset':
+        return 'task reset';
+      default:
+        return type;
+    }
+  })();
+
+  await recordVisibilityEvent({
     type,
-    task_id: taskId,
-  })}\n`, 'utf-8');
+    taskId,
+    command: options.command ?? defaultCommand,
+    ...(options.workflowPhase ? { workflowPhase: options.workflowPhase } : {}),
+    ...(options.outcome ? { outcome: options.outcome } : {}),
+    ...(options.detailCode ? { detailCode: options.detailCode } : {}),
+    ...(options.reasonCode ? { reasonCode: options.reasonCode } : {}),
+    ...(options.startRun === false ? { startRun: false } : {}),
+  });
+}
+
+async function appendOverlayEvent(options: {
+  command: string;
+  requestedAction: OverlayRequestedAction;
+  visibility: OverlayVisibilityApplyResult | null;
+}): Promise<void> {
+  const visibility = options.visibility;
+  if (!visibility) {
+    return;
+  }
+
+  const detailCode = visibility.enabled
+    ? visibility.companion.reason ?? (visibility.applied_action === 'hide' ? 'hidden' : 'shown')
+    : 'disabled';
+  const outcome = options.requestedAction === 'hide' || !visibility.enabled || visibility.companion.launched
+    ? 'success'
+    : 'error';
+
+  await recordVisibilityEvent({
+    type: `overlay.${options.requestedAction}`,
+    command: options.command,
+    workflowPhase: 'overlay',
+    outcome,
+    detailCode,
+    startRun: false,
+  });
 }
 
 function getOverlayAlertKinds(tasks: ParsedTask[], preferredAlerts?: OverlayEventKind[]): OverlayEventKind[] {
@@ -292,7 +356,7 @@ export function getTaskCommandHelpMessage(options: {
     'Available task commands:',
     'Task commands:',
     '  show <task_id>               Show one task and its readiness details',
-    '  new <change-slug>            Create a new task file in a change',
+    '  new <change-slug>            Create a new task contract in a change',
     '  complete <task_id>           Finish implementation and send the task to review',
     '  approve <task_id>            Approve an in-review task and mark it done',
     '  reopen <task_id>             Move a review or done task back into implementation',
@@ -302,6 +366,7 @@ export function getTaskCommandHelpMessage(options: {
     '',
     'For a fast start: superplan run',
     'To run a specific task: superplan run <task_id>',
+    'For tracked authoring: shape changes/<slug>/tasks.md first, then mint task contracts with superplan task new.',
     '',
     'Some recovery commands still exist but are intentionally hidden from the default help surface.',
     '',
@@ -658,7 +723,7 @@ export async function selectNextTask(): Promise<TaskSelectionResult> {
   return buildTaskSelectionResult(undefined, null, 'No ready tasks available');
 }
 
-async function fixTasks(): Promise<TaskCommandResult> {
+async function fixTasks(command = 'task fix'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const parsedTasksResult = await getParsedTasks();
   if (parsedTasksResult.error) {
@@ -690,7 +755,7 @@ async function fixTasks(): Promise<TaskCommandResult> {
         task_id: taskId,
         action: 'reset',
       });
-      await appendEvent(runtimePaths.eventsPath, 'task.reset', taskId);
+      await appendEvent(runtimePaths.eventsPath, 'task.reset', taskId, { command });
     }
   }
 
@@ -713,7 +778,7 @@ async function fixTasks(): Promise<TaskCommandResult> {
         action: 'block',
         reason: 'Task became invalid',
       });
-      await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId);
+      await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId, { command, workflowPhase: 'runtime', reasonCode: 'Task became invalid' });
     } else {
       const { allDependenciesSatisfied, anyDependenciesSatisfied } = getDependencyState(mergedTasks, matchedTask);
       if (!allDependenciesSatisfied || !anyDependenciesSatisfied) {
@@ -728,7 +793,7 @@ async function fixTasks(): Promise<TaskCommandResult> {
           action: 'block',
           reason: 'Dependency not satisfied',
         });
-        await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId);
+        await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId, { command, workflowPhase: 'runtime', reasonCode: 'Dependency not satisfied' });
       }
     }
   }
@@ -789,7 +854,7 @@ function getActivatedTaskFromResult(
   return { task, overlay };
 }
 
-async function startTask(taskId: string): Promise<TaskCommandResult> {
+async function startTask(taskId: string, command = 'task start'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -874,8 +939,13 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.started', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.started', taskId, { command });
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  await appendOverlayEvent({
+    command,
+    requestedAction: 'ensure',
+    visibility: overlayVisibility,
+  });
   const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
   return {
@@ -889,7 +959,7 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
-async function resumeTask(taskId: string): Promise<TaskCommandResult> {
+async function resumeTask(taskId: string, command = 'task resume'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -980,8 +1050,13 @@ async function resumeTask(taskId: string): Promise<TaskCommandResult> {
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskId, { command });
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  await appendOverlayEvent({
+    command,
+    requestedAction: 'ensure',
+    visibility: overlayVisibility,
+  });
   const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
   return {
@@ -995,7 +1070,7 @@ async function resumeTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
-export async function activateTask(taskId: string): Promise<TaskActivationResult> {
+export async function activateTask(taskId: string, command = 'run'): Promise<TaskActivationResult> {
   const mergedTasksResult = await getMergedTasks();
   if (mergedTasksResult.error) {
     return mergedTasksResult.error;
@@ -1015,6 +1090,11 @@ export async function activateTask(taskId: string): Promise<TaskActivationResult
 
   if (matchedTask.status === 'in_progress') {
     const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+    await appendOverlayEvent({
+      command,
+      requestedAction: 'ensure',
+      visibility: overlayVisibility,
+    });
     const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
     return {
@@ -1031,7 +1111,7 @@ export async function activateTask(taskId: string): Promise<TaskActivationResult
   }
 
   if (matchedTask.status === 'blocked' || matchedTask.status === 'needs_feedback') {
-    const resumeTaskResult = await resumeTask(taskId);
+    const resumeTaskResult = await resumeTask(taskId, command);
     if (!resumeTaskResult.ok) {
       return resumeTaskResult;
     }
@@ -1073,7 +1153,7 @@ export async function activateTask(taskId: string): Promise<TaskActivationResult
     };
   }
 
-  const startTaskResult = await startTask(taskId);
+  const startTaskResult = await startTask(taskId, command);
   if (!startTaskResult.ok) {
     return startTaskResult;
   }
@@ -1093,24 +1173,24 @@ export async function activateTask(taskId: string): Promise<TaskActivationResult
   };
 }
 
-async function completeTask(taskId: string): Promise<TaskCommandResult> {
+async function completeTask(taskId: string, command = 'task complete'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
   if (invariantError) {
-    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId);
+    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId, { command, outcome: 'error', workflowPhase: 'review', detailCode: invariantError.error.code });
     return invariantError;
   }
 
   const parsedTask = await getParsedTask(taskId);
   if (parsedTask.error) {
-    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId);
+    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId, { command, outcome: 'error', workflowPhase: 'review', detailCode: parsedTask.error.error.code });
     return parsedTask.error;
   }
 
   const matchedTask = parsedTask.task!;
   if (!matchedTask.is_valid) {
-    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId);
+    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId, { command, outcome: 'error', workflowPhase: 'review', detailCode: 'TASK_INVALID' });
     return getTaskInvalidError();
   }
 
@@ -1128,7 +1208,7 @@ async function completeTask(taskId: string): Promise<TaskCommandResult> {
   }
 
   if (existingTaskState?.status !== 'in_progress') {
-    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId);
+    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId, { command, outcome: 'error', workflowPhase: 'review', detailCode: 'TASK_NOT_STARTED' });
     return {
       ok: false,
       error: {
@@ -1140,7 +1220,7 @@ async function completeTask(taskId: string): Promise<TaskCommandResult> {
   }
 
   if (matchedTask.completed_acceptance_criteria !== matchedTask.total_acceptance_criteria) {
-    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId);
+    await appendEvent(runtimePaths.eventsPath, 'task.complete_failed', taskId, { command, outcome: 'error', workflowPhase: 'review', detailCode: 'TASK_NOT_COMPLETE' });
     return {
       ok: false,
       error: {
@@ -1159,7 +1239,7 @@ async function completeTask(taskId: string): Promise<TaskCommandResult> {
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.review_requested', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.review_requested', taskId, { command, workflowPhase: 'review' });
   await refreshOverlayFromMergedTasks();
 
   return {
@@ -1172,7 +1252,7 @@ async function completeTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
-async function approveTask(taskId: string): Promise<TaskCommandResult> {
+async function approveTask(taskId: string, command = 'task approve'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const parsedTask = await getParsedTask(taskId);
@@ -1216,7 +1296,7 @@ async function approveTask(taskId: string): Promise<TaskCommandResult> {
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.approved', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.approved', taskId, { command, workflowPhase: 'review' });
   await refreshOverlayFromMergedTasks();
 
   return {
@@ -1229,7 +1309,7 @@ async function approveTask(taskId: string): Promise<TaskCommandResult> {
   };
 }
 
-async function blockTask(taskId: string, reason?: string): Promise<TaskCommandResult> {
+async function blockTask(taskId: string, reason?: string, command = 'task block'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -1262,7 +1342,11 @@ async function blockTask(taskId: string, reason?: string): Promise<TaskCommandRe
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.blocked', taskId, {
+    command,
+    workflowPhase: 'feedback',
+    ...(reason ? { reasonCode: reason } : {}),
+  });
   await refreshOverlayFromMergedTasks();
 
   return {
@@ -1275,7 +1359,7 @@ async function blockTask(taskId: string, reason?: string): Promise<TaskCommandRe
   };
 }
 
-async function requestFeedbackTask(taskId: string, message?: string): Promise<TaskCommandResult> {
+async function requestFeedbackTask(taskId: string, message?: string, command = 'task request-feedback'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -1308,7 +1392,11 @@ async function requestFeedbackTask(taskId: string, message?: string): Promise<Ta
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.feedback_requested', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.feedback_requested', taskId, {
+    command,
+    workflowPhase: 'feedback',
+    ...(message ? { reasonCode: message } : {}),
+  });
   await refreshOverlayFromMergedTasks({ preferredAlerts: ['needs_feedback'] });
 
   return {
@@ -1321,7 +1409,7 @@ async function requestFeedbackTask(taskId: string, message?: string): Promise<Ta
   };
 }
 
-async function reopenTask(taskId: string, reason?: string): Promise<TaskCommandResult> {
+async function reopenTask(taskId: string, reason?: string, command = 'task reopen'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const parsedTask = await getParsedTask(taskId);
@@ -1385,8 +1473,17 @@ async function reopenTask(taskId: string, reason?: string): Promise<TaskCommandR
   };
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.reopened', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.reopened', taskId, {
+    command,
+    workflowPhase: 'review',
+    ...(reason ? { reasonCode: reason } : {}),
+  });
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  await appendOverlayEvent({
+    command,
+    requestedAction: 'ensure',
+    visibility: overlayVisibility,
+  });
   const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
   return {
@@ -1400,7 +1497,7 @@ async function reopenTask(taskId: string, reason?: string): Promise<TaskCommandR
   };
 }
 
-async function resetTask(taskId: string): Promise<TaskCommandResult> {
+async function resetTask(taskId: string, command = 'task reset'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const parsedTasksResult = await getParsedTasks();
@@ -1425,7 +1522,7 @@ async function resetTask(taskId: string): Promise<TaskCommandResult> {
   delete runtimeState.tasks[taskId];
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
-  await appendEvent(runtimePaths.eventsPath, 'task.reset', taskId);
+  await appendEvent(runtimePaths.eventsPath, 'task.reset', taskId, { command, workflowPhase: 'runtime' });
   await refreshOverlayFromMergedTasks();
 
   return {
@@ -1496,6 +1593,8 @@ async function createTask(changeSlug: string, title?: string, rawPriority?: stri
     priority,
   }), 'utf-8');
   await appendTaskEntryToIndex(changePaths.tasksIndexPath, changeSlug, taskId, summary);
+  const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
   return {
     ok: true,
@@ -1503,6 +1602,7 @@ async function createTask(changeSlug: string, title?: string, rawPriority?: stri
       task_id: taskId,
       change_id: changeSlug,
       path: path.relative(process.cwd(), taskPath) || taskPath,
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
@@ -1587,7 +1687,7 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
   }
 
   if (subcommand === 'fix') {
-    return fixTasks();
+    return fixTasks('task fix');
   }
 
   if (!taskId) {
@@ -1598,24 +1698,24 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
   }
 
   if (subcommand === 'approve') {
-    return approveTask(taskId);
+    return approveTask(taskId, 'task approve');
   }
 
   if (subcommand === 'reopen') {
-    return reopenTask(taskId, reason);
+    return reopenTask(taskId, reason, 'task reopen');
   }
 
   if (subcommand === 'reset') {
-    return resetTask(taskId);
+    return resetTask(taskId, 'task reset');
   }
 
   if (subcommand === 'block') {
-    return blockTask(taskId, reason);
+    return blockTask(taskId, reason, 'task block');
   }
 
   if (subcommand === 'request-feedback') {
-    return requestFeedbackTask(taskId, message);
+    return requestFeedbackTask(taskId, message, 'task request-feedback');
   }
 
-  return completeTask(taskId);
+  return completeTask(taskId, 'task complete');
 }
