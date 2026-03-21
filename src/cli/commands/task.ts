@@ -2,7 +2,12 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { parse } from './parse';
 import { refreshOverlaySnapshot } from '../overlay-runtime';
-import { applyRequestedOverlayAction } from '../overlay-visibility';
+import {
+  applyRequestedOverlayAction,
+  createOverlayRuntimeNotice,
+  type OverlayRuntimeNotice,
+  type OverlayVisibilityApplyResult,
+} from '../overlay-visibility';
 import { resolveSuperplanRoot } from '../workspace-root';
 import type { OverlayEventKind, OverlayRequestedAction } from '../../shared/overlay';
 import {
@@ -73,20 +78,37 @@ interface TaskFixAction {
 }
 
 type TaskCommandResult =
-  | { ok: true; data: { task: ParsedTask | null } }
-  | { ok: true; data: { tasks: ParsedTask[] } }
-  | { ok: true; data: { task_id: string; status: 'in_progress' } }
-  | { ok: true; data: { task_id: string; status: 'in_review' } }
-  | { ok: true; data: { task_id: string; status: 'done' } }
-  | { ok: true; data: { task_id: string; status: 'blocked' } }
-  | { ok: true; data: { task_id: string; status: 'needs_feedback' } }
-  | { ok: true; data: { task_id: string | null; status: 'in_progress' | 'ready' | null } }
-  | { ok: true; data: { task_id: string; status: string; is_ready: boolean; reasons: string[] } }
-  | { ok: true; data: { task_id: string | null; reason: string } }
-  | { ok: true; data: { events: RuntimeEvent[] } }
-  | { ok: true; data: { task_id: string; reset: true } }
-  | { ok: true; data: { fixed: boolean; actions: TaskFixAction[] } }
-  | { ok: true; data: { task_id: string; change_id: string; path: string } }
+  | { ok: true; data: ({
+      task: ParsedTask | null;
+    } | {
+      tasks: ParsedTask[];
+    } | {
+      task_id: string; status: 'in_progress';
+    } | {
+      task_id: string; status: 'in_review';
+    } | {
+      task_id: string; status: 'done';
+    } | {
+      task_id: string; status: 'blocked';
+    } | {
+      task_id: string; status: 'needs_feedback';
+    } | {
+      task_id: string | null; status: 'in_progress' | 'ready' | null;
+    } | {
+      task_id: string; status: string; is_ready: boolean; reasons: string[];
+    } | {
+      task_id: string | null; reason: string;
+    } | {
+      events: RuntimeEvent[];
+    } | {
+      task_id: string; reset: true;
+    } | {
+      fixed: boolean; actions: TaskFixAction[];
+    } | {
+      task_id: string; change_id: string; path: string;
+    }) & {
+      overlay?: OverlayRuntimeNotice;
+    } }
   | TaskErrorResult;
 
 type TaskErrorResult = { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -234,10 +256,10 @@ function getOverlayAlertKinds(tasks: ParsedTask[], preferredAlerts?: OverlayEven
 async function refreshOverlayFromMergedTasks(options: {
   preferredAlerts?: OverlayEventKind[];
   requestedAction?: OverlayRequestedAction;
-} = {}): Promise<void> {
+} = {}): Promise<OverlayVisibilityApplyResult | null> {
   const mergedTasksResult = await getMergedTasks({ skipInvariant: true });
   if (mergedTasksResult.error) {
-    return;
+    return null;
   }
 
   const { snapshot } = await refreshOverlaySnapshot(mergedTasksResult.tasks!, {
@@ -245,8 +267,10 @@ async function refreshOverlayFromMergedTasks(options: {
   });
 
   if (options.requestedAction) {
-    await applyRequestedOverlayAction(options.requestedAction, snapshot);
+    return await applyRequestedOverlayAction(options.requestedAction, snapshot);
   }
+
+  return null;
 }
 
 function getTaskInvalidError(): TaskErrorResult {
@@ -909,13 +933,15 @@ async function startTask(taskId: string): Promise<TaskCommandResult> {
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.started', taskId);
-  await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
   return {
     ok: true,
     data: {
       task_id: taskId,
       status: 'in_progress',
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
@@ -1011,13 +1037,15 @@ async function resumeTask(taskId: string): Promise<TaskCommandResult> {
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskId);
-  await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
   return {
     ok: true,
     data: {
       task_id: taskId,
       status: 'in_progress',
+      ...(overlay ? { overlay } : {}),
     },
   };
 }
@@ -1308,13 +1336,15 @@ async function reopenTask(taskId: string, reason?: string): Promise<TaskCommandR
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
   await appendEvent(runtimePaths.eventsPath, 'task.reopened', taskId);
-  await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
+  const overlay = createOverlayRuntimeNotice('ensure', overlayVisibility);
 
   return {
     ok: true,
     data: {
       task_id: taskId,
       status: 'in_progress',
+      ...(overlay ? { overlay } : {}),
     },
   };
 }

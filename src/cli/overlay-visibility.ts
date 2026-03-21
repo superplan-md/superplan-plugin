@@ -14,6 +14,14 @@ export interface OverlayVisibilityApplyResult {
   companion: OverlayCompanionLaunchResult;
 }
 
+export interface OverlayRuntimeNotice {
+  requested_action: OverlayRequestedAction;
+  applied_action: OverlayRequestedAction;
+  enabled: boolean;
+  has_content: boolean;
+  companion: OverlayCompanionLaunchResult;
+}
+
 type OverlaySnapshotLike = Pick<OverlaySnapshot, 'workspace_path' | 'active_task' | 'attention_state' | 'board' | 'events'>;
 
 export function hasRenderableSnapshotContent(snapshot: OverlaySnapshotLike): boolean {
@@ -72,5 +80,22 @@ export async function applyRequestedOverlayAction(
     effective_scope: preferences.effective_scope,
     has_content: hasContent,
     companion,
+  };
+}
+
+export function createOverlayRuntimeNotice(
+  requestedAction: OverlayRequestedAction,
+  visibility: OverlayVisibilityApplyResult | null,
+): OverlayRuntimeNotice | undefined {
+  if (!visibility || !visibility.enabled) {
+    return undefined;
+  }
+
+  return {
+    requested_action: requestedAction,
+    applied_action: visibility.applied_action,
+    enabled: visibility.enabled,
+    has_content: visibility.has_content,
+    companion: visibility.companion,
   };
 }
