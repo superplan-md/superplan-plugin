@@ -33,7 +33,7 @@ If a repo instruction conflicts with a default Superplan habit, obey the user or
 
 ## Workspace Precedence
 
-Inspect the repo only enough to choose the right workflow lane before suggesting generic Superplan helpers.
+Inspect the repo first before suggesting generic Superplan helpers.
 
 Prefer the workspace's current harnesses, scripts, custom skills, and repo-native workflows when they already provide a better path.
 
@@ -41,14 +41,15 @@ Use Superplan to coordinate and supervise that setup, not to replace it.
 
 Do not modify or outrank a working user-owned workflow unless the user explicitly asks.
 
-## Exploration Discipline
+## CLI Discipline
 
-Entry routing is not permission for a repo tour.
+Entry routing is not permission to explore the CLI surface.
 
-- inspect only the minimal repo, runtime, or workflow surfaces needed to decide stay-out, readiness, resume, or route
-- prefer existing `.superplan/` artifacts, top-level workflow docs, and the one relevant harness over broad source reading
-- once the next workflow owner is clear, stop inspecting and hand off
-- if the decision still needs broader repo understanding, route to `superplan-context` instead of continuing ad hoc exploration
+- once the current intent is known, use the canonical command path already named in this skill
+- do not call `--help`, neighboring subcommands, or diagnostic commands just to orient yourself when the correct command is already listed
+- use `superplan task show <task_id> --json` only when one task's detailed readiness is actually needed
+- use `superplan doctor --json` only for setup or install uncertainty, not normal routing
+- once the needed CLI state is known, stop polling and route or act
 
 ## Trigger
 
@@ -91,14 +92,14 @@ Assumptions:
 - users should not need to think about which skill comes next
 - host environments may auto-trigger this skill
 - agents should not need to choose between multiple overlapping commands for the same intent
-- entry routing should usually resolve with narrow inspection rather than open-ended repo exploration
+- entry routing should usually resolve without CLI command-surface exploration
 - Superplan should improve the workflow, not hijack it
 
 ## Allowed Actions
 
-- inspect the repo briefly and narrowly for readiness and context
-- inspect only the repo-native workflows, scripts, harnesses, and custom skills that materially affect the routing decision
-- inspect whether work is already shaped and should resume in a later phase without drifting into broad repo exploration
+- inspect the repo briefly for readiness and context
+- inspect repo-native workflows, scripts, harnesses, and custom skills before suggesting generic Superplan helpers
+- inspect whether work is already shaped and should resume in a later phase
 - decide whether to stay out or continue
 - route to `superplan-route`
 - route to `superplan-context` when missing context is the real blocker
@@ -151,6 +152,8 @@ Canonical command rule:
 
 - prefer the one obvious command for the current intent
 - do not choose between multiple overlapping commands when one canonical path exists
+- do not explore neighboring CLI commands when one canonical path is already listed here
+- do not call `--help` or diagnostic commands just to confirm a command the skill already named
 - prefer commands that already return the needed task payload instead of making extra follow-up calls
 
 ## Entry Decision Order
@@ -160,7 +163,7 @@ Apply this order:
 1. respect direct user and repo instructions
 2. honor the subagent guard and skip top-level routing inside bounded task subagents
 3. stay out if Superplan adds no durable structure, visibility, or reusable context
-4. inspect only the repo's existing workflows that materially affect the routing decision, and prefer them over new Superplan-specific helpers
+4. inspect the repo's existing workflows and prefer them over new Superplan-specific helpers
 5. check readiness layers: CLI availability, setup, init, and context
 6. if the request targets already shaped work, resume the owning workflow phase directly
 7. if the request is new or the structure decision is still open, route to `superplan-route`
@@ -222,8 +225,8 @@ See `references/routing-boundaries.md`.
 - sending already shaped work back to `superplan-route` by reflex
 - forcing engagement when Superplan adds no value
 - turning every request into tracked work
-- using entry routing as cover for broad repo exploration once the next workflow owner is already clear
-- reading unrelated implementation files before deciding whether to stay out, resume, or route
+- using entry routing as cover for CLI command-surface exploration once the next workflow owner is already clear
+- calling `--help`, neighboring subcommands, or repeated `status`/`task show`/`doctor` checks without a concrete routing need
 
 ## Readiness Rules
 

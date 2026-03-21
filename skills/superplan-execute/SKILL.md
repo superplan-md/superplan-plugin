@@ -7,7 +7,7 @@ description: Use when tracked Superplan work exists and one or more tasks are re
 
 ## Overview
 
-Move graph-ready work forward without drifting into broad replanning or repo exploration.
+Move graph-ready work forward without drifting into broad replanning or unnecessary CLI exploration.
 
 This is the main execution control surface once work has been shaped.
 It should behave more like a scheduler and control plane than a single linear worker.
@@ -103,14 +103,15 @@ Therefore:
 - use `status --json` and `run --json` to inspect the frontier; use `task show <task_id> --json` only when one specific task needs deeper inspection
 - keep approval decisions explicit through `complete`, `approve`, and `reopen`
 
-## Exploration Discipline
+## CLI Discipline
 
-Execution is not a discovery pass.
+Execution is not permission to wander across CLI commands.
 
 - start from the current task contract, the `superplan run` payload, and one relevant verification path
-- inspect only the code, tests, docs, or runtime facts that directly affect the current task or blocker
-- once you know the next command, edit, or blocker transition, stop reading and act
-- if progress depends on broader unknowns, classify that as structural drift or missing context and route upward instead of continuing ad hoc exploration
+- do not call `--help`, neighboring subcommands, or extra diagnostic commands when the next execution command is already known
+- use `superplan task show <task_id> --json` only when one task's detailed readiness or reasons are actually needed
+- use `superplan doctor --json` only for setup or install issues, not normal execution
+- once you know the next command, edit, or blocker transition, stop probing the CLI and act
 
 ## Lifecycle Semantics And Recovery
 
@@ -201,7 +202,7 @@ See `references/subagent-dispatch.md`.
 - treating every discovered issue as a reason to reshape
 - replacing a working user-owned harness with a Superplan-specific flow during execution
 - rewriting or bypassing existing custom skills or scripts unless explicitly asked
-- falling into read-only repo exploration after the next execution step is already known
+- falling into read-only CLI exploration after the next execution step is already known
 - repeatedly polling `status` or `task show` without a concrete state, blocker, or handoff reason
 
 ## Outputs

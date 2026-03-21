@@ -54,7 +54,7 @@ Assumptions:
 - once Superplan engages, the smallest useful depth is preferred
 - graph truth, task-contract truth, and runtime truth are distinct
 - context risk can outweigh depth risk in brownfield work
-- routing should usually be possible with narrow inspection of the request, current Superplan state, and one relevant workspace surface
+- routing should usually be possible without CLI command-surface exploration
 
 ## Routing Heuristic
 
@@ -68,14 +68,13 @@ Use this decision order:
 Prefer under-ceremony over over-ceremony only until trust or coordination would be lost.
 If lack of structure would hide real dependencies, choose the next deeper mode.
 
-## Exploration Discipline
+## CLI Discipline
 
-Routing is not permission to tour the repo.
+Routing is not permission to explore the CLI surface.
 
-- inspect only enough to classify `stay_out`, `direct`, `task`, `slice`, `program`, or `context-first`
-- prefer `.superplan/` artifacts, current workflow docs, and one relevant harness over broad implementation reading
-- once the smallest useful depth is clear, stop inspecting and hand off
-- if broader repo understanding is required before depth can be trusted, route to `superplan-context` instead of continuing to explore here
+- if routing needs current Superplan state, use the one minimal command or artifact that answers it
+- do not call `--help` or neighboring commands just to orient yourself when the route is already clear
+- once the depth decision is clear, stop probing the CLI and hand off
 
 ## Depth Modes
 
@@ -125,8 +124,8 @@ See `references/depth-modes.md`.
 - routing to context first just because the repo is large
 - treating task files as the whole tracked model
 - choosing `program` just because the request sounds important
-- using routing as an excuse for open-ended repo exploration
-- reading broad implementation surfaces after the depth choice is already clear
+- using routing as an excuse for CLI command-surface exploration
+- probing neighboring commands after the depth choice is already clear
 
 ## Context Routing Rule
 

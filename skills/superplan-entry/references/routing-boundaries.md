@@ -32,12 +32,11 @@
 
 ## Workspace Precedence
 
-- inspect only enough of the repo to choose the right workflow lane
+- inspect the repo first
 - prefer user-owned harnesses, scripts, custom skills, and repo-native workflows
 - use Superplan to coordinate those workflows rather than replacing them
 - only add generic Superplan help when the workspace does not already provide a better path
 - never let a Superplan-specific helper outrank a working user-owned setup
-- once the lane is clear, stop reading and hand off
 
 ## Workflow Spine Vs Support Skills
 

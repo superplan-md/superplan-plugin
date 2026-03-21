@@ -167,7 +167,7 @@ Review handoff now works in two steps:
 
 - The public product story is centered on planning, task pickup, resumption, and handoff rather than side experiments.
 - `change`, `task new`, and `task batch` are the primary authoring helpers for new tracked work.
-- Superplan skills should favor narrow targeted inspection and stop exploring once the next workflow action is clear; only `superplan-context` should permit broader repo reading, and even there it should stay bounded by durable context questions.
+- Superplan skills should discourage unnecessary CLI exploration. Repo exploration is allowed when useful, but agents should not wander across `--help`, neighboring commands, or repeated `status`, `task show`, and `doctor` calls once the canonical workflow command is already clear.
 - when overlay support is enabled, `task new`, `task batch`, `run`, `run <task_id>`, and `task reopen` can reveal the overlay to keep authoring or execution state visible.
 - `sync` refreshes Superplan's view of the current repo and does not reinstall skills.
 - `update` refreshes the installed CLI plus any existing global or repo-local skill installs; local source checkouts should still be updated from the checkout and reinstalled explicitly.

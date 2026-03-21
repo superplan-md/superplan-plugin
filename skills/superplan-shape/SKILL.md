@@ -193,20 +193,20 @@ For large tracked work, shape the graph according to the hard contract:
 
 Do not author "graph-like" markdown that ignores the contract shape.
 
-## Exploration Discipline
+## CLI Discipline
 
-Shaping is not license to read the whole repo.
+Shaping is not permission to explore the CLI surface.
 
-- inspect only the surfaces needed to choose artifact depth, graph boundaries, dependency edges, and the initial verification loop
-- prefer the current task surface, existing `.superplan/` artifacts, and one relevant harness over broad code tours
-- once the next executable frontier is clear, stop exploring and author the artifacts
-- if real uncertainty remains, capture it as investigation or dependency work, or route to `superplan-context`, instead of continuing ad hoc exploration
+- use the current CLI contract already listed in this skill instead of probing adjacent commands
+- do not call `--help` or overlapping authoring or diagnostic commands when `change new`, `task new`, `task batch`, `parse`, `status`, `task show`, or `doctor` already cover the need
+- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task show <task_id> --json` for one task detail, and `superplan doctor --json` only for install or setup readiness
+- once the needed authoring or validation command is known, run it instead of exploring alternatives
 
 ## Workspace Precedence Rule
 
 Treat the workspace's existing setup as the default operating surface.
 
-- inspect only the specific workspace surfaces needed before inventing new Superplan-specific structure
+- inspect the workspace before inventing new Superplan-specific structure
 - prefer repo-native scripts, harnesses, custom skills, and routines when they already solve the problem
 - add Superplan-specific help only when the workspace does not already provide a better path
 
@@ -268,8 +268,8 @@ Treat the workspace's existing setup as the default operating surface.
 - using future commands as if they already exist
 - hiding real CLI contract gaps behind generic statements like "capture this in the task graph" when no current graph parser exists
 - pretending uncertain work is already cleanly decomposed
-- using shaping as an excuse for open-ended repo exploration after the artifact and frontier decisions are already clear
-- reading broad unrelated code instead of capturing real uncertainty as investigation, dependency, or context work
+- using shaping as an excuse for CLI command-surface exploration after the artifact and frontier decisions are already clear
+- calling `--help`, `doctor`, `status`, or `task show` without a concrete shaping reason
 - pushing all ambiguity downstream into execution
 - replacing a working repo-native workflow with a Superplan-specific one by default
 
