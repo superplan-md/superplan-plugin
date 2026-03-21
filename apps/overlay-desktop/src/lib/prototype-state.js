@@ -1,3 +1,5 @@
+import { isTaskReadyForReview } from './compact-state.js';
+
 export const WINDOW_PRESETS = {
   compact: {
     width: 56,
@@ -109,6 +111,10 @@ function getSecondaryLabel(snapshot, primaryTask) {
   }
 
   if (primaryTask.status === 'backlog') {
+    if (isTaskReadyForReview(primaryTask)) {
+      return 'Ready for review';
+    }
+
     return 'Up next';
   }
 

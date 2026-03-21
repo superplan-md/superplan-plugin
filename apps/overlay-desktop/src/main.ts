@@ -21,6 +21,12 @@ import {
   getSnapshotTaskProgress,
   isTauriWindowAvailable,
 } from './lib/runtime-helpers.js';
+import {
+  createCompactPresentationModel,
+  isTaskReadyForReview,
+  shouldAutoExpandCompactDetail,
+  shouldShowCompactDetail,
+} from './lib/compact-state.js';
 
 type OverlayTask = {
   task_id: string;
@@ -512,6 +518,10 @@ function taskLeadMarkup(task: OverlayTask): string {
     return 'In progress';
   }
 
+  if (isTaskReadyForReview(task)) {
+    return 'Ready for review';
+  }
+
   return 'Queued';
 }
 
@@ -598,6 +608,64 @@ function compactWorkingDescriptionMarkup(task: OverlayTask | null): string {
   return escapeHtml(getCompactTaskDescription(task));
 }
 
+function getCompactDetailEyebrow(snapshot: OverlaySnapshot, task: OverlayTask | null, reviewReady: boolean): string {
+  if (snapshot.active_task) {
+    return 'Working now';
+  }
+
+  if (task?.status === 'blocked') {
+    return 'Blocked';
+  }
+
+  if (task?.status === 'done') {
+    return 'Recently finished';
+  }
+
+  if (reviewReady) {
+    return 'Ready for review';
+  }
+
+  return 'Up next';
+}
+
+function compactDetailDescriptionMarkup(
+  snapshot: OverlaySnapshot,
+  viewModel: PrototypeViewModel,
+  task: OverlayTask | null,
+  reviewReady: boolean,
+): string {
+  if (snapshot.active_task) {
+    return compactWorkingDescriptionMarkup(task);
+  }
+
+  if (task?.status === 'blocked' && task.updated_at) {
+    return liveLabelMarkup('relative', task.updated_at, 'Updated ');
+  }
+
+  if (task?.status === 'done' && task.completed_at) {
+    const completionDuration = formatCompletionDurationLabel(task);
+    const detailParts = [
+      liveLabelMarkup('relative', task.completed_at, 'Finished '),
+      completionDuration ? escapeHtml(completionDuration) : '',
+    ].filter(Boolean);
+
+    if (detailParts.length > 0) {
+      return detailParts.join('<span class="task-card__detail-separator" aria-hidden="true"></span>');
+    }
+  }
+
+  const note = task ? getTaskNote(task) ?? task.description?.trim() ?? null : null;
+  if (note) {
+    return escapeHtml(note);
+  }
+
+  if (reviewReady) {
+    return 'Task complete and waiting for approval.';
+  }
+
+  return escapeHtml(viewModel.secondaryLabel);
+}
+
 function compactProgressMarkup(snapshot: OverlaySnapshot): string {
   const progress = getCompactTaskProgress(snapshot);
   const radius = 17;
@@ -622,17 +690,15 @@ function compactProgressMarkup(snapshot: OverlaySnapshot): string {
   `;
 }
 
-function shouldShowWorkingDetail(snapshot: OverlaySnapshot): boolean {
-  return snapshot.attention_state === 'normal'
-    && Boolean(snapshot.active_task)
-    && compactWorkingExpanded;
-}
-
 function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
   const statusLabel = getCompactStatusLabel(viewModel);
   const boardLabel = getCompactBoardLabel(viewModel);
+  const presentation = latestSnapshot
+    ? createCompactPresentationModel(latestSnapshot, { detailExpanded: compactWorkingExpanded })
+    : null;
+  const shouldShowDetail = presentation?.presentation === 'detail';
 
-  if (viewModel.attentionState === 'needs_feedback' || viewModel.attentionState === 'all_tasks_done') {
+  if (shouldShowDetail && (viewModel.attentionState === 'needs_feedback' || viewModel.attentionState === 'all_tasks_done')) {
     const isDone = viewModel.attentionState === 'all_tasks_done';
     const doneCount = viewModel.columnCounts.done;
     const eyebrow = isDone ? 'Session complete' : 'Needs your input';
@@ -668,30 +734,49 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
               : ''}
           </span>
         </div>
-        <button
-          class="compact-indicator__board-button"
-          data-action="open-board"
-          aria-label="${escapeHtml(boardLabel)}"
-          type="button"
-        >
-          ${compactBoardIconMarkup()}
-        </button>
+        <div class="compact-indicator__attention-actions">
+          <button
+            class="compact-indicator__utility-button compact-indicator__utility-button--close"
+            data-action="hide-overlay"
+            aria-label="Hide overlay"
+            type="button"
+          >
+            ${compactCloseIconMarkup()}
+          </button>
+          <button
+            class="compact-indicator__board-button compact-indicator__board-button--attention"
+            data-action="open-board"
+            aria-label="${escapeHtml(boardLabel)}"
+            type="button"
+          >
+            ${compactBoardIconMarkup()}
+          </button>
+        </div>
       </section>
     `;
   }
 
-  if (viewModel.attentionState === 'normal' && viewModel.primaryTask && latestSnapshot && shouldShowWorkingDetail(latestSnapshot)) {
+  if (viewModel.attentionState === 'normal' && presentation?.primaryTask && latestSnapshot && shouldShowDetail) {
+    const detailTask = presentation.primaryTask;
+    const reviewReady = presentation.isReviewReadyTask;
+    const eyebrow = getCompactDetailEyebrow(latestSnapshot, detailTask, reviewReady);
+    const descriptionMarkup = compactDetailDescriptionMarkup(latestSnapshot, viewModel, detailTask, reviewReady);
+    const eyebrowClass = latestSnapshot.active_task
+      ? 'compact-indicator__eyebrow'
+      : 'compact-indicator__eyebrow compact-indicator__eyebrow--quiet';
+    const detailModifier = latestSnapshot.active_task ? '' : ' compact-indicator--working_summary';
+
     return `
       <section
-        class="compact-indicator compact-indicator--working_detail"
+        class="compact-indicator compact-indicator--working_detail${detailModifier}"
         aria-label="${escapeHtml(statusLabel)}"
       >
         <div class="compact-indicator__main compact-indicator__main--working" data-overlay-drag>
           ${compactMarkMarkup(false)}
           <span class="compact-indicator__content compact-indicator__content--working">
-            <span class="compact-indicator__eyebrow">Working now</span>
-            <span class="compact-indicator__title">${escapeHtml(viewModel.primaryTask.title)}</span>
-            <span class="compact-indicator__description compact-indicator__description--live">${compactWorkingDescriptionMarkup(viewModel.primaryTask)}</span>
+            <span class="${eyebrowClass}">${escapeHtml(eyebrow)}</span>
+            <span class="compact-indicator__title">${escapeHtml(detailTask.title)}</span>
+            <span class="compact-indicator__description${latestSnapshot.active_task ? ' compact-indicator__description--live' : ''}">${descriptionMarkup}</span>
           </span>
           <div class="compact-indicator__working-actions">
             ${compactProgressMarkup(latestSnapshot)}
@@ -705,14 +790,18 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
                 >
                   ${compactCloseIconMarkup()}
                 </button>
-                <button
-                  class="compact-indicator__utility-button compact-indicator__utility-button--collapse"
-                  data-action="collapse-working-card"
-                  aria-label="Minimize to compact chip"
-                  type="button"
-                >
-                  ${compactCollapseIconMarkup()}
-                </button>
+                ${presentation.showCollapseAction
+                  ? `
+                    <button
+                      class="compact-indicator__utility-button compact-indicator__utility-button--collapse"
+                      data-action="collapse-working-card"
+                      aria-label="Minimize to compact chip"
+                      type="button"
+                    >
+                      ${compactCollapseIconMarkup()}
+                    </button>
+                  `
+                  : ''}
               </div>
               <button
                 class="compact-indicator__board-button compact-indicator__board-button--working"
@@ -743,11 +832,7 @@ function compactIndicatorMarkup(viewModel: PrototypeViewModel): string {
 }
 
 function getCompactSize(snapshot: OverlaySnapshot): { width: number; height: number } {
-  if (
-    snapshot.attention_state === 'needs_feedback'
-    || snapshot.attention_state === 'all_tasks_done'
-    || shouldShowWorkingDetail(snapshot)
-  ) {
+  if (shouldShowCompactDetail(snapshot, compactWorkingExpanded)) {
     return getCompactAttentionPreset();
   }
 
@@ -1343,8 +1428,9 @@ async function loadSnapshot(): Promise<void> {
     void playAttentionSound(attentionSoundKind);
   }
 
-  if (latestSnapshot.attention_state !== 'normal' || !latestSnapshot.active_task) {
-    compactWorkingExpanded = false;
+  if (shouldAutoExpandCompactDetail(previousSnapshot, latestSnapshot, mode)) {
+    compactWorkingExpanded = true;
+    writeStoredCompactWorkingExpanded(true);
   }
 
   if (shouldTriggerCompactAdvance(previousSnapshot, latestSnapshot)) {

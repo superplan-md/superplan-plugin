@@ -225,13 +225,14 @@ Runtime summary should keep legible:
 Use the runtime-aware CLI as the scheduler:
 
 1. `superplan status --json` to inspect the frontier
-2. `superplan run --json` to continue the current task or claim the next ready task, with the selected task contract and selection reason in the payload
-3. `superplan task show <task_id> --json` only when you need one task's full details and readiness reasons
-4. `superplan task block <task_id> --reason "<reason>" --json` when blocked
-5. `superplan task request-feedback <task_id> --message "<message>" --json` when user input is required
-6. `superplan task complete <task_id> --json` only after the task contract is actually satisfied
-7. `superplan task fix --json` if runtime state becomes inconsistent
-8. if overlay support is enabled for the workspace, expect task start/resume/run transitions to auto-reveal the overlay as work becomes active; use `superplan overlay ensure --json` only when an explicit reveal or resync is still needed, and `superplan overlay hide --json` when the workspace becomes idle or empty
+2. `superplan run --json` to continue the current task or claim the next ready task
+3. `superplan task show <task_id> --json` before editing code
+4. `superplan task why <task_id> --json` when readiness is unclear
+5. `superplan task block <task_id> --reason "<reason>" --json` when blocked
+6. `superplan task request-feedback <task_id> --message "<message>" --json` when user input is required
+7. `superplan task complete <task_id> --json` only after the task contract is actually satisfied
+8. `superplan task fix --json` if runtime state becomes inconsistent
+9. if overlay support is enabled for the workspace, expect task start/resume/run transitions to auto-reveal the overlay as work becomes active; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
 
 ## Decision And Gotcha Rules
 
@@ -271,6 +272,7 @@ Current CLI:
 - `superplan task request-feedback <task_id> --message <message>`
 - `superplan task complete <task_id>`
 - `superplan task fix`
+- `superplan task reset <task_id>`
 - `superplan run`
 - `superplan status`
 - `superplan overlay ensure`

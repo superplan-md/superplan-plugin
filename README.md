@@ -4,38 +4,6 @@ Turn normal planning into an executable local workflow.
 
 Superplan is a lightweight planning and execution CLI for repositories that want durable task contracts, agent-friendly JSON output, and a simple runtime loop without a heavyweight project system.
 
-It is built for teams and coding agents that want planning to stay:
-
-- local and inspectable
-- resumable after interruptions
-- shared between humans and agents
-- structured enough to pick the right next task without a separate web app
-
-## Normal Planning Vs Superplan
-
-Normal planning in a repo usually means some mix of chat history, scratch notes, TODO comments, and memory. That works until work gets interrupted, handed off, or split across dependencies.
-
-Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
-
-| Normal planning | Superplan planning |
-| --- | --- |
-| Notes and plans drift across chats and files | Task contracts live under `.superplan/changes/` |
-| The next step is often guessed manually | `superplan run --json` picks or continues the next task |
-| “Done” often means different things to different people | `complete`, `approve`, and `reopen` make review state explicit |
-| Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
-| Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
-| Planning structure is often handwritten | `superplan change new` and `superplan task new` scaffold the common path |
-
-## Why Superplan
-
-Superplan keeps three layers separate:
-
-- **Task contracts**: markdown files that describe scope, dependencies, and acceptance criteria
-- **Runtime state**: active, blocked, feedback-needed, and completed state under `.superplan/runtime`
-- **Durable context**: reusable repo truths under `.superplan/context`
-
-That split makes it easier to reason about what work exists, what is happening now, and what future agents should know.
-
 ## Quick Start
 
 ### Install with curl
@@ -43,8 +11,10 @@ That split makes it easier to reason about what work exists, what is happening n
 If you want a one-command installer, use:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh
 ```
+
+That pins both the fetched installer and the repo checkout to the `alpha.4` release tag.
 
 The installer:
 
@@ -65,7 +35,7 @@ Prerequisites:
 You can also install to a custom npm prefix:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
 ```
 
 ### Install with npm from a local checkout
@@ -73,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/instal
 If you prefer an npm-driven install from source, build the CLI and install it globally from the repo root:
 
 ```bash
-git clone -b dev https://github.com/superplan-md/cli.git
+git clone --branch alpha.4 --depth 1 https://github.com/superplan-md/cli.git
 cd cli
 npm install
 npm run build
@@ -193,6 +163,38 @@ That creates the repo-local Superplan scaffold:
 superplan change new improve-task-authoring
 superplan task new improve-task-authoring --title "Add authoring scaffold"
 ```
+
+## Why Superplan
+
+Superplan keeps three layers separate:
+
+- **Task contracts**: markdown files that describe scope, dependencies, and acceptance criteria
+- **Runtime state**: active, blocked, feedback-needed, and completed state under `.superplan/runtime`
+- **Durable context**: reusable repo truths under `.superplan/context`
+
+That split makes it easier to reason about what work exists, what is happening now, and what future agents should know.
+
+It is built for teams and coding agents that want planning to stay:
+
+- local and inspectable
+- resumable after interruptions
+- shared between humans and agents
+- structured enough to pick the right next task without a separate web app
+
+## Normal Planning Vs Superplan
+
+Normal planning in a repo usually means some mix of chat history, scratch notes, TODO comments, and memory. That works until work gets interrupted, handed off, or split across dependencies.
+
+Superplan keeps the same markdown-friendly workflow, but adds runtime truth:
+
+| Normal planning | Superplan planning |
+| --- | --- |
+| Notes and plans drift across chats and files | Task contracts live under `.superplan/changes/` |
+| The next step is often guessed manually | `superplan run --json` picks or continues the next task |
+| “Done” often means different things to different people | `complete`, `approve`, and `reopen` make review state explicit |
+| Blocked work is easy to lose track of | Runtime state records `blocked`, `needs_feedback`, and `done` |
+| Handoffs depend on chat context | JSON-first commands and durable context make work resumable |
+| Planning structure is often handwritten | `superplan change new` and `superplan task new` scaffold the common path |
 
 ## Core Workflow
 
@@ -364,6 +366,10 @@ superplan parse --json
 - `superplan sync` refreshes Superplan's view of the current repo and does not reinstall skills.
 - `superplan update` is intended for normal installed copies of the CLI, not local source checkouts, and refreshes skills for existing setups after a successful update.
 - The current system is CLI-first and markdown-first.
+
+## Credits
+
+Parts of Superplan were inspired by Superpowers and its approach to structured local workflow.
 
 ## License
 

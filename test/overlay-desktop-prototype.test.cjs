@@ -118,6 +118,31 @@ test('prototype view model builds board columns in UX order and only shows Needs
   assert.equal(viewModel.visibleColumns[0].items.length, 1);
 });
 
+test('prototype view model marks fully complete backlog tasks as ready for review', async () => {
+  const { createPrototypeViewModel } = await loadPrototypeStateModule();
+
+  const viewModel = createPrototypeViewModel({
+    ...sampleSnapshot,
+    active_task: null,
+    board: {
+      ...sampleSnapshot.board,
+      in_progress: [],
+      backlog: [{
+        task_id: 'T-905',
+        title: 'Approve compact overlay transitions',
+        status: 'backlog',
+        completed_acceptance_criteria: 3,
+        total_acceptance_criteria: 3,
+        progress_percent: 100,
+      }],
+      done: [],
+    },
+  }, 'compact');
+
+  assert.equal(viewModel.primaryTask?.task_id, 'T-905');
+  assert.equal(viewModel.secondaryLabel, 'Ready for review');
+});
+
 test('prototype mode toggles between compact and expanded and exposes refined window presets', async () => {
   const { getNextMode, getWindowPreset } = await loadPrototypeStateModule();
 

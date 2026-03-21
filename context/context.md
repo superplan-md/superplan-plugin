@@ -32,13 +32,13 @@ The current documented top-level command surface is:
 
 Supported install paths in the current repo are:
 
-- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | sh`
-- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
+- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh`
+- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
 - npm from a local checkout after build: `npm install -g .`
 
 Important install note:
 
-- `scripts/install.sh` now defaults `SUPERPLAN_REF` to `dev`, which matches the current tracked branch for this repository.
+- Public quick-start docs pin the installer to `alpha.4` by using both the tagged raw URL and `SUPERPLAN_REF=alpha.4`, because `scripts/install.sh` still defaults `SUPERPLAN_REF` to `dev` when that env var is absent.
 - `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later and then refresh existing skill installs.
 - Older installed binaries that predate the `update` command still need one manual rebuild/reinstall before `superplan update` becomes available.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
