@@ -70,7 +70,7 @@ test('install script installs superplan from a local source snapshot into a cust
   assert.equal(installMetadata.source_dir, REPO_ROOT);
   assert.equal(installMetadata.ref, 'dev');
   assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'config.toml')).then(() => true, () => false), true);
-  assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-using-superplan', 'SKILL.md')).then(() => true, () => false), true);
+  assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md')).then(() => true, () => false), true);
 
   const cliResult = await runCommand(path.join(prefixDir, 'bin', 'superplan'), ['--version', '--json'], {
     cwd: sandbox.cwd,

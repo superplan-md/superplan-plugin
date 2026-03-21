@@ -17,7 +17,7 @@ test('doctor reports when overlay is enabled but no launchable companion is inst
 [overlay]
 enabled = true
 `);
-  await writeFile(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-using-superplan', 'SKILL.md'), '# superplan-using-superplan\n');
+  await writeFile(path.join(sandbox.home, '.config', 'superplan', 'skills', 'superplan-entry', 'SKILL.md'), '# superplan-entry\n');
 
   const { doctor } = loadDistModule('cli/commands/doctor.js');
   const result = await withSandboxEnv(sandbox, async () => doctor([]));

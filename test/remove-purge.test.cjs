@@ -16,8 +16,8 @@ test('remove deletes local superplan state including .superplan changes', async 
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
-  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-using-superplan', 'SKILL.md'), '# superplan-using-superplan\n');
-  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute-task-graph', 'SKILL.md'), '# superplan-execute-task-graph\n');
+  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry', 'SKILL.md'), '# superplan-entry\n');
+  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute', 'SKILL.md'), '# superplan-execute\n');
   await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'custom-skill', 'SKILL.md'), '# custom\n');
 
   const { remove } = loadDistModule('cli/commands/remove.js', {
@@ -31,8 +31,8 @@ test('remove deletes local superplan state including .superplan changes', async 
   assert.equal(result.data.scope, 'local');
   assert.equal(result.data.mode, 'remove');
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-using-superplan')), false);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute-task-graph')), false);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute')), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'custom-skill', 'SKILL.md')), true);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan', 'changes')), false);
 });
@@ -208,8 +208,8 @@ test('remove from a nested subdirectory deletes the nearest parent local superpl
 
   await writeFile(path.join(sandbox.cwd, '.superplan', 'config.toml'), 'version = "0.1"\n');
   await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-001.md'), '# task\n');
-  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-using-superplan', 'SKILL.md'), '# superplan-using-superplan\n');
-  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute-task-graph', 'SKILL.md'), '# superplan-execute-task-graph\n');
+  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry', 'SKILL.md'), '# superplan-entry\n');
+  await writeFile(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-execute', 'SKILL.md'), '# superplan-execute\n');
   await fs.mkdir(nestedWorkspaceDir, { recursive: true });
 
   const { remove } = loadDistModule('cli/commands/remove.js', {
@@ -225,5 +225,5 @@ test('remove from a nested subdirectory deletes the nearest parent local superpl
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'local');
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
-  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-using-superplan')), false);
+  assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
 });
