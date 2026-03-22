@@ -113,10 +113,29 @@ function resolveMacosAppBundlePath(
 }
 
 function commandMatchesExecutablePath(commandLine: string, executablePath: string): boolean {
-  return commandLine === executablePath
+  // Direct path match
+  if (
+    commandLine === executablePath
     || commandLine.startsWith(`${executablePath} `)
     || commandLine.includes(` ${executablePath} `)
-    || commandLine.endsWith(` ${executablePath}`);
+    || commandLine.endsWith(` ${executablePath}`)
+  ) {
+    return true;
+  }
+
+  // On macOS, processes launched via `open -a <bundle>` appear in ps as the
+  // product name rather than the full executable path.  Accept both the
+  // canonical Tauri binary names so we don't start a second instance.
+  const macosBundleNames = [
+    'Superplan Overlay Desktop',
+    'superplan-overlay-desktop',
+  ];
+  return macosBundleNames.some(
+    name => commandLine === name
+      || commandLine.startsWith(`${name} `)
+      || commandLine.includes(` ${name} `)
+      || commandLine.endsWith(` ${name}`),
+  );
 }
 
 function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
@@ -271,9 +290,12 @@ export function getMacosOverlayBundleLaunchPlan(input: {
   appBundlePath: string;
   executablePath: string;
   workspacePath: string;
-  runningCommandLines: string[];
+  // Bug #10: accepts full entries (pid + command) so the caller avoids a
+  // second `ps` spawn; only the command strings are used here.
+  runningProcessEntries: Array<{ pid: number; command: string }>;
 }): MacosOverlayBundleLaunchPlan {
-  const matchingCommands = input.runningCommandLines.filter(commandLine => (
+  const runningCommandLines = input.runningProcessEntries.map(e => e.command);
+  const matchingCommands = runningCommandLines.filter(commandLine => (
     commandMatchesExecutablePath(commandLine, input.executablePath)
   ));
 
@@ -337,7 +359,15 @@ async function resolveOverlayCompanionStatusFromPaths(input: {
     ? (await pathExists(configuredExecutablePath) ? configuredExecutablePath : null)
     : (installPath ? await resolveExecutableFromInstallPath(installPath, input.executableRelativePath) : null);
 
-  if (!resolvedExecutablePath) {
+  // Fix C/D: if the stored executable_path is stale (file moved/reinstalled)
+  // but the install_path still exists, try to re-resolve from install_path
+  // rather than returning an unhelpful 'executable_missing' error.
+  const finalExecutablePath = resolvedExecutablePath
+    ?? (configuredExecutablePath && !resolvedExecutablePath && installPath
+      ? await resolveExecutableFromInstallPath(installPath, input.executableRelativePath)
+      : null);
+
+  if (!finalExecutablePath) {
     return {
       configured: true,
       launchable: false,
@@ -354,7 +384,7 @@ async function resolveOverlayCompanionStatusFromPaths(input: {
     launchable: true,
     source: input.source,
     install_path: installPath,
-    executable_path: resolvedExecutablePath,
+    executable_path: finalExecutablePath,
   };
 }
 
@@ -408,6 +438,10 @@ export async function launchInstalledOverlayCompanion(
   }
 
   try {
+    // Bug #10 fix: make ONE ps call and reuse the result for both the dedup
+    // check and the macOS bundle launch plan.  The original code made two
+    // separate ps spawns (readRunningProcessEntries + readProcessCommandLines)
+    // which wasted 100–400ms per ensure invocation.
     const runningProcesses = await readRunningProcessEntries();
     const matchingProcesses = runningProcesses && companionStatus.executable_path
       ? getMatchingOverlayProcesses(runningProcesses, companionStatus.executable_path)
@@ -428,9 +462,9 @@ export async function launchInstalledOverlayCompanion(
     const macosAppBundlePath = process.platform === 'darwin'
       ? resolveMacosAppBundlePath(companionStatus.install_path, companionStatus.executable_path)
       : null;
-    const runningCommandLines = process.platform === 'darwin'
-      ? await readProcessCommandLines()
-      : null;
+
+    // Bug #10: reuse runningProcesses already fetched above for the macOS
+    // launch plan; no second ps spawn needed.
     const launchPlan = matchingProcesses.length > 0
       ? {
           mode: 'handoff_existing_instance' as const,
@@ -438,12 +472,12 @@ export async function launchInstalledOverlayCompanion(
           args: ['--workspace', resolvedWorkspacePath],
         }
       : macosAppBundlePath
-        ? (runningCommandLines
+        ? (runningProcesses
           ? getMacosOverlayBundleLaunchPlan({
               appBundlePath: macosAppBundlePath,
               executablePath: companionStatus.executable_path,
               workspacePath: resolvedWorkspacePath,
-              runningCommandLines,
+              runningProcessEntries: runningProcesses,
             })
           : {
               mode: 'handoff_existing_instance' as const,
@@ -465,8 +499,24 @@ export async function launchInstalledOverlayCompanion(
     }
 
     const child = spawn(launchPlan.command, launchPlan.args, commonSpawnOptions);
-
     child.unref();
+
+    // Bug #14 fix: on Linux (AppImage), verify the process didn't exit
+    // immediately due to missing FUSE or broken AppImage permissions.
+    // A 300ms wait catches the vast majority of immediate exits.
+    if (process.platform === 'linux') {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      if (child.exitCode !== null) {
+        return {
+          ...companionStatus,
+          attempted: true,
+          launched: false,
+          workspace_path: resolvedWorkspacePath,
+          reason: 'launch_failed',
+          message: `Overlay companion exited immediately (exit code ${child.exitCode}). On Linux, ensure FUSE is installed: sudo apt install fuse libfuse2`,
+        };
+      }
+    }
 
     return {
       ...companionStatus,
@@ -486,7 +536,10 @@ export async function launchInstalledOverlayCompanion(
   }
 }
 
-export async function terminateInstalledOverlayCompanion(): Promise<void> {
+// Bug #11 fix: accept an optional workspacePath so only the overlay process
+// for the CURRENT workspace is terminated. Without this, on a machine with
+// multiple superplan workspaces open, hiding one overlay killed ALL of them.
+export async function terminateInstalledOverlayCompanion(workspacePath?: string): Promise<void> {
   const companionStatus = await inspectOverlayCompanionInstall();
 
   if (!companionStatus.launchable || !companionStatus.executable_path) {
@@ -498,7 +551,13 @@ export async function terminateInstalledOverlayCompanion(): Promise<void> {
     return;
   }
 
-  const matchingProcesses = getMatchingOverlayProcesses(runningProcesses, companionStatus.executable_path);
+  const resolvedWorkspacePath = workspacePath
+    ? await fs.realpath(workspacePath).catch(() => path.resolve(workspacePath))
+    : null;
+
+  const matchingProcesses = getMatchingOverlayProcesses(runningProcesses, companionStatus.executable_path)
+    .filter(entry => !resolvedWorkspacePath || commandMatchesWorkspacePath(entry.command, resolvedWorkspacePath));
+
   for (const processEntry of matchingProcesses) {
     await terminateProcess(processEntry.pid);
   }

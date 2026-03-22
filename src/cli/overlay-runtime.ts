@@ -149,6 +149,12 @@ function getAttentionState(tasks: OverlayTaskSource[]): OverlayAttentionState {
   return 'normal';
 }
 
+// Bug H3 fix: cap the ring buffer so overlay.json and the V8 snapshot heap
+// don't grow without bound. Every task lifecycle event previously appended
+// forever; in a long session this caused multi-MB JSON and increasing disk I/O
+// at every poll tick.
+const MAX_OVERLAY_EVENTS = 20;
+
 function createAlertEvents(previousEvents: OverlayEvent[], alertKinds: OverlayEventKind[], timestamp: string): OverlayEvent[] {
   const newEvents = alertKinds.map((kind, index) => ({
     id: `${kind}:${Date.parse(timestamp)}:${index}`,
@@ -156,7 +162,7 @@ function createAlertEvents(previousEvents: OverlayEvent[], alertKinds: OverlayEv
     created_at: timestamp,
   }));
 
-  return [...previousEvents, ...newEvents];
+  return [...previousEvents, ...newEvents].slice(-MAX_OVERLAY_EVENTS);
 }
 
 export async function refreshOverlaySnapshot(
@@ -189,7 +195,9 @@ export async function refreshOverlaySnapshot(
   });
 
   await fs.mkdir(paths.runtime_dir, { recursive: true });
-  await fs.writeFile(paths.snapshot_path, JSON.stringify(snapshot, null, 2), 'utf-8');
+  const tempSnapshotPath = `${paths.snapshot_path}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  await fs.writeFile(tempSnapshotPath, JSON.stringify(snapshot, null, 2), 'utf-8');
+  await fs.rename(tempSnapshotPath, paths.snapshot_path);
 
   return {
     paths,
@@ -210,7 +218,9 @@ export async function setOverlayVisibilityRequest(
   });
 
   await fs.mkdir(paths.runtime_dir, { recursive: true });
-  await fs.writeFile(paths.control_path, JSON.stringify(control, null, 2), 'utf-8');
+  const tempControlPath = `${paths.control_path}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  await fs.writeFile(tempControlPath, JSON.stringify(control, null, 2), 'utf-8');
+  await fs.rename(tempControlPath, paths.control_path);
 
   return {
     paths,

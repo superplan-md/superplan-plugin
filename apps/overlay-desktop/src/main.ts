@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow, LogicalSize, PhysicalPosition } from '@tauri-apps/api/window';
 import '@fontsource/instrument-sans/400.css';
 import '@fontsource/instrument-sans/500.css';
@@ -68,7 +69,7 @@ type OverlayControlState = {
 
 type ResizeDirection = 'North' | 'South' | 'East' | 'West' | 'NorthEast' | 'NorthWest' | 'SouthEast' | 'SouthWest';
 
-const POLL_INTERVAL_MS = 900;
+const POLL_INTERVAL_MS = 2000;
 const LIVE_TIME_REFRESH_MS = 1000;
 const COMPACT_ADVANCE_DURATION_MS = 1600;
 const COMPACT_HINT_DURATION_MS = 2400;
@@ -79,6 +80,10 @@ const EXPANDED_MIN_WIDTH = 980;
 const EXPANDED_MIN_HEIGHT = 620;
 const OVERLAY_POSITION_STORAGE_KEY = 'superplan.overlay.position';
 const COMPACT_WORKING_CARD_STORAGE_KEY = 'superplan.overlay.compactWorkingCardExpanded';
+
+// Bug #5/#12: only treat snapshot load as fatal after this many consecutive
+// failures so transient disk hiccups don't immediately collapse the overlay.
+const MAX_CONSECUTIVE_SNAPSHOT_FAILURES = 3;
 const superplanMarkUrl = new URL('./assets/superplan-mark.png', import.meta.url).href;
 const RESIZE_DIRECTIONS = new Set<ResizeDirection>([
   'North',
@@ -112,6 +117,15 @@ let overlayDragDidStart = false;
 let overlayDragInProgress = false;
 let suppressNextCompactSurfaceClick = false;
 let suppressNextCompactSurfaceClickTimer: number | undefined;
+
+// Bug #13: prevent concurrent syncOverlayRuntime calls.
+let syncInFlight = false;
+// Bug #5/#12: reset to 0 on every successful snapshot load.
+let consecutiveSnapshotFailures = 0;
+// Bug H6: don't terminate before we've received at least one non-null control
+// state — on cold start, loadControlState() may return null (file not yet
+// written) which collapses to requestedVisibility=false → instant self-destruct.
+let bootstrapComplete = false;
 
 const root = document.querySelector<HTMLDivElement>('#app');
 
@@ -1408,7 +1422,19 @@ async function loadSnapshot(): Promise<void> {
   if (isTauriWindowAvailable(getCurrentWindow)) {
     try {
       snapshotText = await invoke<string>('load_overlay_snapshot');
+      // Bug fix: reset failure counter on every success.
+      consecutiveSnapshotFailures = 0;
     } catch {
+      consecutiveSnapshotFailures += 1;
+
+      if (consecutiveSnapshotFailures < MAX_CONSECUTIVE_SNAPSHOT_FAILURES) {
+        // Transient failure (disk hiccup, cold-start race) — keep the last
+        // known snapshot rather than collapsing to empty immediately.
+        return;
+      }
+
+      // N consecutive failures — something is structurally wrong, fall through
+      // to empty snapshot which will trigger a graceful exit.
       snapshotText = JSON.stringify(getEmptyRuntimeSnapshot());
     }
   } else {
@@ -1497,11 +1523,20 @@ async function playAttentionSound(kind: string): Promise<void> {
   }
 }
 
+let consecutiveControlFailures = 0;
+
 async function loadControlState(): Promise<void> {
   let controlText: string | null;
   try {
     controlText = await invoke<string | null>('load_overlay_control_state');
+    consecutiveControlFailures = 0;
   } catch {
+    consecutiveControlFailures += 1;
+    if (consecutiveControlFailures < MAX_CONSECUTIVE_SNAPSHOT_FAILURES) {
+      // Transient FS error. Keep previous control state and skip update this tick.
+      return;
+    }
+    // Give up and fall through to null (which triggers terminate).
     controlText = null;
   }
 
@@ -1523,14 +1558,55 @@ async function syncDerivedVisibility(): Promise<void> {
 
   lastAppliedVisibility = visible;
   if (!visible) {
+    // Bug H6 fix: don't terminate on the very first tick when latestControlState
+    // is still null (overlay-control.json not flushed yet at cold start). The
+    // null defaults to requestedVisibility=false which would fire
+    // terminateOverlayApplication before the overlay shows anything.
+    if (!bootstrapComplete) {
+      return;
+    }
     await terminateOverlayApplication();
     return;
+  }
+
+  // Mark bootstrap complete once we've successfully shown the overlay.
+  bootstrapComplete = true;
+
+  // Restart the poll timer in case it was stopped when the overlay was last hidden.
+  if (pollTimer === undefined) {
+    pollTimer = window.setInterval(() => {
+      void syncOverlayRuntime();
+    }, POLL_INTERVAL_MS);
   }
 
   await applyVisibility(true);
 }
 
 async function terminateOverlayApplication(): Promise<void> {
+  // Bug H4/H8 fix: stop ALL timers immediately so they don't fire during the
+  // async process-exit window and waste CPU/prevent V8 GC idle time.
+  if (pollTimer !== undefined) {
+    window.clearInterval(pollTimer);
+    pollTimer = undefined;
+  }
+
+  if (liveTimeTimer !== undefined) {
+    window.clearInterval(liveTimeTimer);
+    liveTimeTimer = undefined;
+  }
+
+  if (compactAdvanceTimer !== undefined) {
+    window.clearTimeout(compactAdvanceTimer);
+    compactAdvanceTimer = undefined;
+  }
+
+  if (compactHintTimer !== undefined) {
+    window.clearTimeout(compactHintTimer);
+    compactHintTimer = undefined;
+  }
+
+  clearCompactSurfaceClickSuppression();
+
   try {
     await invoke('exit_overlay_application');
     return;
@@ -1548,15 +1624,34 @@ async function terminateOverlayApplication(): Promise<void> {
     }
   }
 
-  await applyVisibility(false);
+  // Last resort: navigate away so all JS timers stop and the WebView idles.
+  // Do NOT call applyVisibility(false) here — that only hides the window
+  // while leaving the process alive and burning CPU/RAM.
+  try {
+    window.location.replace('about:blank');
+  } catch {
+    // ignore — already done our best
+  }
 }
 
+// Bug #13 fix: only run one syncOverlayRuntime at a time.  If a previous sync
+// is still in flight (slow disk) and the poll timer fires again, skip so we
+// don't end up calling terminateOverlayApplication twice concurrently.
 async function syncOverlayRuntime(): Promise<void> {
-  await Promise.all([
-    loadSnapshot(),
-    loadControlState(),
-  ]);
-  await syncDerivedVisibility();
+  if (syncInFlight) {
+    return;
+  }
+
+  syncInFlight = true;
+  try {
+    await Promise.all([
+      loadSnapshot(),
+      loadControlState(),
+    ]);
+    await syncDerivedVisibility();
+  } finally {
+    syncInFlight = false;
+  }
 }
 
 function handleKeydown(event: KeyboardEvent): void {
@@ -1579,12 +1674,27 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('mousemove', handleOverlayDragMove, true);
     window.addEventListener('mouseup', handleOverlayDragEnd, true);
     window.addEventListener('blur', handleOverlayDragEnd);
-    pollTimer = window.setInterval(() => {
-      void syncOverlayRuntime();
-    }, POLL_INTERVAL_MS);
+    // Only start the poll timer if the overlay is actually visible.
+    // syncDerivedVisibility will restart it when visibility turns on.
+    if (lastAppliedVisibility !== false) {
+      pollTimer = window.setInterval(() => {
+        void syncOverlayRuntime();
+      }, POLL_INTERVAL_MS);
+    }
     liveTimeTimer = window.setInterval(() => {
       refreshLiveTimeLabels();
     }, LIVE_TIME_REFRESH_MS);
+    // Bug #9 fix: immediately re-poll when the Rust single-instance handler
+    // switches workspace. Without this, the frontend waits up to POLL_INTERVAL_MS
+    // before picking up the new workspace's snapshot.
+    try {
+      await listen('overlay:workspace-changed', () => {
+        consecutiveSnapshotFailures = 0;
+        void syncOverlayRuntime();
+      });
+    } catch {
+      // Non-fatal: older Tauri contexts may not support this event.
+    }
   } catch (error) {
     console.error('startup failed', error);
     renderStartupError(error);
