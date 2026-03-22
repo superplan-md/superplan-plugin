@@ -28,7 +28,6 @@ The current documented top-level command surface is:
 - `task`
 - `overlay`
 - `visibility`
-- `visibility`
 
 ## Installation
 
@@ -61,6 +60,7 @@ Important install note:
 - `src/cli/commands/task.ts`: Implements task inspection, scaffolding, selection, readiness explanation, runtime transitions, and deterministic runtime repair.
 - `src/cli/commands/run.ts`: Starts or continues the next task through the task runtime loop.
 - `src/cli/commands/status.ts`: Returns active, ready, blocked, and feedback-needed task summaries.
+- `src/cli/commands/overlay.ts`: Manages overlay preference state and runtime visibility.
 - `src/cli/commands/visibility.ts`: Builds repo-local visibility reports for the active or latest run.
 - `src/cli/visibility-runtime.ts`: Owns run session tracking, enriched runtime events, and report generation.
 - `skills/`: Bundled workflow skills copied into `dist/skills` during build.

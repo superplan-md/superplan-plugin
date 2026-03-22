@@ -18,6 +18,8 @@ type InstallScope = 'global' | 'local' | 'both' | 'skip';
 type AgentScope = 'project' | 'global';
 
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  amazonq: 'Amazon Q',
+  antigravity: 'Antigravity',
   claude: 'Claude Code',
   codex: 'Codex',
   cursor: 'Cursor',
@@ -25,7 +27,7 @@ const AGENT_DISPLAY_NAMES: Record<string, string> = {
   opencode: 'OpenCode',
 };
 
-const AGENT_SELECTION_ORDER = ['claude', 'codex', 'gemini', 'cursor', 'opencode'];
+const AGENT_SELECTION_ORDER = ['claude', 'codex', 'gemini', 'cursor', 'opencode', 'amazonq', 'antigravity'];
 const SELECT_ALL_AGENTS_VALUE = '__all_agents__';
 
 export interface SetupOptions {
@@ -268,6 +270,20 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         install_kind: 'skills_namespace',
         cleanup_paths: [path.join(baseDir, '.opencode', 'commands', 'superplan.md')],
       },
+      {
+        name: 'amazonq',
+        path: path.join(baseDir, '.amazonq'),
+        install_path: path.join(baseDir, '.amazonq', 'rules'),
+        install_kind: 'skills_namespace',
+        cleanup_paths: [path.join(baseDir, '.amazonq', 'rules', 'superplan')],
+      },
+      {
+        name: 'antigravity',
+        path: path.join(baseDir, '.agents'),
+        install_path: path.join(baseDir, '.agents', 'workflows'),
+        install_kind: 'skills_namespace',
+        cleanup_paths: [path.join(baseDir, '.agents', 'workflows', 'superplan')],
+      },
     ];
   }
 
@@ -305,6 +321,20 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       install_path: path.join(baseDir, '.config', 'opencode', 'skills'),
       install_kind: 'skills_namespace',
       cleanup_paths: [path.join(baseDir, '.config', 'opencode', 'commands', 'superplan.md')],
+    },
+    {
+      name: 'amazonq',
+      path: path.join(baseDir, '.amazonq'),
+      install_path: path.join(baseDir, '.amazonq', 'rules'),
+      install_kind: 'skills_namespace',
+      cleanup_paths: [path.join(baseDir, '.amazonq', 'rules', 'superplan')],
+    },
+    {
+      name: 'antigravity',
+      path: path.join(baseDir, '.agents'),
+      install_path: path.join(baseDir, '.agents', 'workflows'),
+      install_kind: 'skills_namespace',
+      cleanup_paths: [path.join(baseDir, '.agents', 'workflows', 'superplan')],
     },
   ];
 }
