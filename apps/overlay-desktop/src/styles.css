@@ -371,7 +371,7 @@ p {
 }
 
 .compact-indicator--normal .compact-indicator__badge {
-  animation: breathe-neutral 2.8s ease-in-out infinite;
+  animation: breathe-neutral 2.8s ease-in-out;
 }
 
 .compact-indicator--needs_feedback .compact-indicator__badge {
@@ -382,7 +382,7 @@ p {
   border-color: rgba(255, 124, 32, 0.18);
   background: rgba(255, 124, 32, 0.16);
   box-shadow: 0 4px 12px rgba(255, 124, 32, 0.12);
-  animation: nudge-warm 2.8s ease-in-out infinite;
+  animation: nudge-warm 2.8s ease-in-out;
 }
 
 .compact-indicator--needs_feedback,
@@ -474,7 +474,7 @@ p {
   border-radius: 999px;
   border: 1px solid rgba(255, 154, 75, 0.2);
   background: rgba(255, 124, 32, 0.16);
-  animation: nudge-warm 2.8s ease-in-out infinite;
+  animation: nudge-warm 2.8s ease-in-out;
 }
 
 .compact-indicator__corner-badge::before {
@@ -490,7 +490,7 @@ p {
   border-color: rgba(111, 221, 176, 0.22);
   background: rgba(111, 221, 176, 0.16);
   box-shadow: 0 4px 12px rgba(111, 221, 176, 0.12);
-  animation: breathe-neutral 3.2s ease-in-out infinite;
+  animation: breathe-neutral 3.2s ease-in-out;
 }
 
 .compact-indicator__corner-badge--done::before {
@@ -568,7 +568,7 @@ p {
   width: 24%;
   background: linear-gradient(90deg, transparent, rgba(135, 185, 255, 0.14), transparent);
   opacity: 0.22;
-  animation: working-sheen 4.8s ease-in-out infinite;
+  animation: working-sheen 4.8s ease-in-out;
 }
 
 .compact-indicator__main--working {
@@ -602,12 +602,12 @@ p {
   border-radius: 999px;
   border-color: rgba(53, 201, 220, 0.18);
   opacity: 1;
-  animation: working-core-pulse 2.8s ease-in-out infinite;
+  animation: working-core-pulse 2.8s ease-in-out;
 }
 
 .compact-indicator--working_detail .compact-indicator__mark {
   width: 22px;
-  animation: working-mark-glow 3.2s ease-in-out infinite;
+  animation: working-mark-glow 3.2s ease-in-out;
 }
 
 .compact-indicator--working_detail .compact-indicator__eyebrow {
@@ -626,7 +626,7 @@ p {
   height: 6px;
   border-radius: 999px;
   background: var(--aqua);
-  animation: pulse-live 2.2s ease-in-out infinite;
+  animation: pulse-live 2.2s ease-in-out;
   flex: none;
 }
 
@@ -682,7 +682,7 @@ p {
 
 .compact-indicator--working_detail .compact-indicator__progress-value-ring {
   filter: drop-shadow(0 0 5px rgba(135, 185, 255, 0.2));
-  animation: working-ring-breathe 2.6s ease-in-out infinite;
+  animation: working-ring-breathe 2.6s ease-in-out;
 }
 
 .compact-indicator--working_summary::after,
@@ -1395,7 +1395,7 @@ p {
   border-radius: 999px;
   background: var(--aqua);
   box-shadow: 0 0 0 3px rgba(53, 201, 220, 0.06);
-  animation: pulse-live 1.8s ease-in-out infinite;
+  animation: pulse-live 1.8s ease-in-out;
 }
 
 .board-grid {
@@ -1933,12 +1933,12 @@ p {
 
 .app-shell--attention-needs_feedback .status-pill,
 .app-shell--attention-needs_feedback .status-pill__dot {
-  animation: pulse-warm 2.2s ease-in-out infinite;
+  animation: pulse-warm 2.2s ease-in-out;
 }
 
 .app-shell--attention-all_tasks_done .status-pill,
 .app-shell--attention-all_tasks_done .status-pill__dot {
-  animation: pulse-calm 3.2s ease-in-out infinite;
+  animation: pulse-calm 3.2s ease-in-out;
 }
 
 @keyframes pulse-warm {
