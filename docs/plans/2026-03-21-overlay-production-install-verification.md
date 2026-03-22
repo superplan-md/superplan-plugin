@@ -43,7 +43,7 @@ Observed evidence:
 The current user-facing install flow is:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/dev/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | sh
 ```
 
 Current behavior:

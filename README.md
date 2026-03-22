@@ -43,7 +43,7 @@ The fastest path is the one-command installer below. For most users, Superplan s
 If you want a one-command installer, use:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh
 ```
 
 That pins both the fetched installer and the repo checkout to the `alpha.4` release tag.
@@ -67,7 +67,7 @@ Prerequisites:
 You can also install to a custom npm prefix:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh
 ```
 
 ### Install with npm from a local checkout
@@ -75,8 +75,8 @@ curl -fsSL https://raw.githubusercontent.com/superplan-md/cli/alpha.4/scripts/in
 If you prefer an npm-driven install from source, build the CLI and install it globally from the repo root:
 
 ```bash
-git clone --branch alpha.4 --depth 1 https://github.com/superplan-md/cli.git
-cd cli
+git clone --branch alpha.4 --depth 1 https://github.com/superplan-md/superplan-plugin.git
+cd superplan-plugin
 npm install
 npm run build
 npm install -g .

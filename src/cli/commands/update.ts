@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { refreshInstalledSkills, type RefreshInstalledSkillsResult } from './setup';
 
-const DEFAULT_REPO_URL = 'https://github.com/superplan-md/cli.git';
+const DEFAULT_REPO_URL = 'https://github.com/superplan-md/superplan-plugin.git';
 const DEFAULT_REF = 'dev';
 
 interface UpdateOptions {
