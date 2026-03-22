@@ -5,7 +5,7 @@ use std::{
     sync::Mutex,
 };
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg(target_os = "macos")]
 use tauri_nspanel::{
@@ -113,6 +113,10 @@ fn apply_secondary_launch(
             .set(Some(workspace_override));
     }
 
+    // Bug #9 fix: notify the frontend immediately so it re-polls the new
+    // workspace's snapshot without waiting up to POLL_INTERVAL_MS.
+    let _ = app_handle.emit("overlay:workspace-changed", ());
+
     apply_overlay_visibility(app_handle, true)?;
 
     #[cfg(not(target_os = "macos"))]
@@ -160,15 +164,17 @@ fn load_overlay_control_state(app_handle: tauri::AppHandle) -> Result<Option<Str
         })
 }
 
+// Bug #1 fix: manifest_dir (CARGO_MANIFEST_DIR) was baked in at compile time
+// and pointed to the developer's machine path. It is now removed entirely from
+// workspace discovery — the correct path must come from --workspace or
+// SUPERPLAN_OVERLAY_WORKSPACE. Keeping current_dir allows dev-mode discovery.
 fn candidate_workspace_roots<'a>(
     workspace_override: Option<&'a Path>,
     current_dir: &'a Path,
-    manifest_dir: &'a Path,
 ) -> Vec<&'a Path> {
     workspace_override
         .into_iter()
         .chain(current_dir.ancestors())
-        .chain(manifest_dir.ancestors())
         .collect()
 }
 
@@ -176,11 +182,10 @@ fn resolve_runtime_file_path_from_sources(
     file_name: &str,
     workspace_override: Option<&Path>,
     current_dir: &Path,
-    manifest_dir: &Path,
 ) -> Option<PathBuf> {
     let mut seen_roots = HashSet::new();
 
-    for root in candidate_workspace_roots(workspace_override, current_dir, manifest_dir) {
+    for root in candidate_workspace_roots(workspace_override, current_dir) {
         let root = root.to_path_buf();
         if !seen_roots.insert(root.clone()) {
             continue;
@@ -198,35 +203,35 @@ fn resolve_runtime_file_path_from_sources(
 fn resolve_overlay_snapshot_path_from_sources(
     workspace_override: Option<&Path>,
     current_dir: &Path,
-    manifest_dir: &Path,
 ) -> Option<PathBuf> {
     resolve_runtime_file_path_from_sources(
         "overlay.json",
         workspace_override,
         current_dir,
-        manifest_dir,
     )
 }
 
 fn resolve_overlay_control_path_from_sources(
     workspace_override: Option<&Path>,
     current_dir: &Path,
-    manifest_dir: &Path,
 ) -> Option<PathBuf> {
     resolve_runtime_file_path_from_sources(
         "overlay-control.json",
         workspace_override,
         current_dir,
-        manifest_dir,
     )
 }
 
 fn resolve_runtime_context(
     app_handle: &tauri::AppHandle,
-) -> Result<(Option<PathBuf>, PathBuf, PathBuf), String> {
+) -> Result<(Option<PathBuf>, PathBuf), String> {
     let current_dir = env::current_dir()
         .map_err(|error| format!("failed to determine current working directory: {error}"))?;
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    // Bug #1 fix: CARGO_MANIFEST_DIR was removed — it baked in the build
+    // machine's source path, causing workspace lookup to fail on all other
+    // devices. The workspace MUST be supplied via --workspace or
+    // SUPERPLAN_OVERLAY_WORKSPACE.
     let workspace_override = app_handle
         .state::<OverlayWorkspaceState>()
         .get()
@@ -236,35 +241,32 @@ fn resolve_runtime_context(
                 .and_then(normalize_workspace_override)
         });
 
-    Ok((workspace_override, current_dir, manifest_dir))
+    Ok((workspace_override, current_dir))
 }
 
 fn resolve_overlay_snapshot_path(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
-    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context(app_handle)?;
+    let (workspace_override, current_dir) = resolve_runtime_context(app_handle)?;
 
     Ok(resolve_overlay_snapshot_path_from_sources(
         workspace_override.as_deref(),
         current_dir.as_path(),
-        manifest_dir.as_path(),
     ))
 }
 
 fn resolve_overlay_control_path(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
-    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context(app_handle)?;
+    let (workspace_override, current_dir) = resolve_runtime_context(app_handle)?;
 
     Ok(resolve_overlay_control_path_from_sources(
         workspace_override.as_deref(),
         current_dir.as_path(),
-        manifest_dir.as_path(),
     ))
 }
 
 fn resolve_overlay_workspace_root(app_handle: &tauri::AppHandle) -> Result<Option<PathBuf>, String> {
-    let (workspace_override, current_dir, manifest_dir) = resolve_runtime_context(app_handle)?;
+    let (workspace_override, current_dir) = resolve_runtime_context(app_handle)?;
 
     Ok(workspace_override
-        .or_else(|| find_workspace_root(current_dir.as_path()))
-        .or_else(|| find_workspace_root(manifest_dir.as_path())))
+        .or_else(|| find_workspace_root(current_dir.as_path())))
 }
 
 #[cfg(target_os = "macos")]
@@ -394,13 +396,19 @@ fn persist_overlay_requested_action(
     })?;
     let runtime_dir = overlay_runtime_dir_for_workspace(workspace_root.as_path());
     let control_path = runtime_dir.join("overlay-control.json");
-    let payload = format!(
-        "{{\n  \"workspace_path\": {:?},\n  \"requested_action\": {:?},\n  \"updated_at\": {:?},\n  \"visible\": {}\n}}\n",
-        workspace_root.display().to_string(),
-        requested_action,
-        updated_at,
-        visible,
-    );
+
+    // Bug #8 fix: use serde_json instead of format!("{:?}") which produced
+    // Rust debug-escaped strings rather than valid JSON (e.g. double-backslash
+    // on Windows paths, unsafe on paths with embedded quotes).
+    let payload_value = serde_json::json!({
+        "workspace_path": workspace_root.display().to_string(),
+        "requested_action": requested_action,
+        "updated_at": updated_at,
+        "visible": visible,
+    });
+    let payload = serde_json::to_string_pretty(&payload_value)
+        .map_err(|error| format!("failed to serialize overlay control state: {error}"))?
+        + "\n";
 
     fs::create_dir_all(&runtime_dir).map_err(|error| {
         format!(
@@ -608,28 +616,24 @@ mod tests {
     fn resolve_overlay_snapshot_path_prefers_workspace_override() {
         let workspace_root = unique_temp_path("override");
         let cwd_root = unique_temp_path("cwd");
-        let manifest_root = unique_temp_path("manifest");
 
         let snapshot_path = create_snapshot_file(&workspace_root);
 
         let resolved = super::resolve_overlay_snapshot_path_from_sources(
             Some(workspace_root.as_path()),
             cwd_root.as_path(),
-            manifest_root.as_path(),
         );
 
         assert_eq!(resolved.as_deref(), Some(snapshot_path.as_path()));
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(cwd_root);
-        let _ = fs::remove_dir_all(manifest_root);
     }
 
     #[test]
     fn resolve_overlay_snapshot_path_finds_ancestor_workspace_snapshot() {
         let workspace_root = unique_temp_path("ancestor");
         let cwd_root = workspace_root.join("apps/overlay-desktop/src-tauri");
-        let manifest_root = unique_temp_path("manifest");
 
         let snapshot_path = create_snapshot_file(&workspace_root);
         fs::create_dir_all(&cwd_root).expect("create cwd path");
@@ -637,41 +641,35 @@ mod tests {
         let resolved = super::resolve_overlay_snapshot_path_from_sources(
             None,
             cwd_root.as_path(),
-            manifest_root.as_path(),
         );
 
         assert_eq!(resolved.as_deref(), Some(snapshot_path.as_path()));
 
         let _ = fs::remove_dir_all(workspace_root);
-        let _ = fs::remove_dir_all(manifest_root);
     }
 
     #[test]
     fn resolve_overlay_control_path_prefers_workspace_override() {
         let workspace_root = unique_temp_path("control-override");
         let cwd_root = unique_temp_path("control-cwd");
-        let manifest_root = unique_temp_path("control-manifest");
 
         let control_path = create_control_file(&workspace_root);
 
         let resolved = super::resolve_overlay_control_path_from_sources(
             Some(workspace_root.as_path()),
             cwd_root.as_path(),
-            manifest_root.as_path(),
         );
 
         assert_eq!(resolved.as_deref(), Some(control_path.as_path()));
 
         let _ = fs::remove_dir_all(workspace_root);
         let _ = fs::remove_dir_all(cwd_root);
-        let _ = fs::remove_dir_all(manifest_root);
     }
 
     #[test]
     fn resolve_overlay_control_path_finds_ancestor_workspace_file() {
         let workspace_root = unique_temp_path("control-ancestor");
         let cwd_root = workspace_root.join("apps/overlay-desktop/src-tauri");
-        let manifest_root = unique_temp_path("control-manifest");
 
         let control_path = create_control_file(&workspace_root);
         fs::create_dir_all(&cwd_root).expect("create cwd path");
@@ -679,13 +677,11 @@ mod tests {
         let resolved = super::resolve_overlay_control_path_from_sources(
             None,
             cwd_root.as_path(),
-            manifest_root.as_path(),
         );
 
         assert_eq!(resolved.as_deref(), Some(control_path.as_path()));
 
         let _ = fs::remove_dir_all(workspace_root);
-        let _ = fs::remove_dir_all(manifest_root);
     }
 
     #[test]

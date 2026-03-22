@@ -71,7 +71,9 @@ export async function applyRequestedOverlayAction(
   const [{ control }, companion] = await Promise.all([
     setOverlayVisibilityRequest(appliedAction, { workspacePath: snapshot.workspace_path }),
     appliedAction === 'hide'
-      ? terminateInstalledOverlayCompanion().then(() => createSkippedCompanionLaunchResult(snapshot.workspace_path))
+      // Bug #11 fix: pass workspace path so we only kill the overlay process
+      // for THIS workspace, not all overlay instances across all workspaces.
+      ? terminateInstalledOverlayCompanion(snapshot.workspace_path).then(() => createSkippedCompanionLaunchResult(snapshot.workspace_path))
       : launchInstalledOverlayCompanion(snapshot.workspace_path),
   ]);
 

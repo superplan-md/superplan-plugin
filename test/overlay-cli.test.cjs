@@ -20,8 +20,8 @@ test('macOS bundle launch plan reuses an already running matching workspace inst
     appBundlePath: '/Applications/Superplan Overlay Desktop.app',
     executablePath: '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop',
     workspacePath: '/tmp/workspace',
-    runningCommandLines: [
-      '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop --workspace /tmp/workspace',
+    runningProcessEntries: [
+      { pid: 1234, command: '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop --workspace /tmp/workspace' },
     ],
   });
 
@@ -40,8 +40,8 @@ test('macOS bundle launch plan hands off through the executable when another wor
     appBundlePath: '/Applications/Superplan Overlay Desktop.app',
     executablePath,
     workspacePath: '/tmp/next-workspace',
-    runningCommandLines: [
-      `${executablePath} --workspace /tmp/current-workspace`,
+    runningProcessEntries: [
+      { pid: 1234, command: `${executablePath} --workspace /tmp/current-workspace` },
     ],
   });
 
@@ -59,7 +59,7 @@ test('macOS bundle launch plan opens the app bundle without forcing a new instan
     appBundlePath: '/Applications/Superplan Overlay Desktop.app',
     executablePath: '/Applications/Superplan Overlay Desktop.app/Contents/MacOS/superplan-overlay-desktop',
     workspacePath: '/tmp/workspace',
-    runningCommandLines: [],
+    runningProcessEntries: [],
   });
 
   assert.deepEqual(plan, {

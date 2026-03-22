@@ -171,7 +171,18 @@ resolve_overlay_executable_path() {
   install_path="$1"
 
   if [ -d "$install_path/Contents/MacOS" ]; then
-    find "$install_path/Contents/MacOS" -type f | sort | head -n 1
+    # Prefer the canonical Tauri binary names before falling back to
+    # an alphabetical find, which could accidentally pick a helper binary.
+    for candidate in \
+      "$install_path/Contents/MacOS/Superplan Overlay Desktop" \
+      "$install_path/Contents/MacOS/superplan-overlay-desktop"; do
+      if [ -f "$candidate" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done
+    # Fallback: first executable file found inside MacOS/
+    find "$install_path/Contents/MacOS" -type f -perm -u+x 2>/dev/null | sort | head -n 1
     return 0
   fi
 
@@ -283,6 +294,12 @@ install_overlay_companion() {
   OVERLAY_EXECUTABLE_PATH="$(resolve_overlay_executable_path "$OVERLAY_INSTALL_PATH")"
   [ -n "$OVERLAY_EXECUTABLE_PATH" ] || fail "failed to resolve overlay executable inside $OVERLAY_INSTALL_PATH"
   chmod +x "$OVERLAY_EXECUTABLE_PATH" 2>/dev/null || true
+
+  # Bug H2 fix: compute the path of the binary RELATIVE to the install directory
+  # so that overlay-companion.ts can re-resolve it when the absolute path
+  # becomes stale (e.g. move, re-extract) without falling back to the unsafe
+  # 'first executable in readdir' heuristic.
+  OVERLAY_EXECUTABLE_RELATIVE_PATH="${OVERLAY_EXECUTABLE_PATH#"$OVERLAY_INSTALL_PATH/"}"
 }
 
 prompt_overlay_enabled_by_default() {
@@ -324,16 +341,22 @@ run_machine_setup() {
   "$INSTALL_BIN_DIR/superplan" setup --quiet --json >/dev/null \
     || fail "machine setup failed after install"
 
+  # Bug H1 fix: only enable the overlay preference when the overlay was actually
+  # installed. Previously this ran unconditionally, which wrote
+  # 'overlay.enabled = true' to config.toml even when the download failed —
+  # causing every subsequent 'superplan run' to silently not show the overlay.
   if [ -n "$OVERLAY_INSTALL_PATH" ]; then
     if prompt_overlay_enabled_by_default; then
       say "Enabling desktop overlay by default"
-      "$INSTALL_BIN_DIR/superplan" overlay enable --global --json >/dev/null \
+      "$INSTALL_BIN_DIR/superplan" overlay enable --global --json > /dev/null \
         || fail "failed to enable overlay by default"
     else
       say "Leaving desktop overlay disabled by default"
-      "$INSTALL_BIN_DIR/superplan" overlay disable --global --json >/dev/null \
+      "$INSTALL_BIN_DIR/superplan" overlay disable --global --json > /dev/null \
         || fail "failed to persist overlay preference"
     fi
+  else
+    say "Overlay not installed; skipping overlay preference setup"
   fi
 }
 
@@ -357,7 +380,10 @@ fi
 
 [ -f "$SOURCE_WORKTREE/package.json" ] || fail "package.json not found in installer worktree"
 resolve_overlay_release_target
-resolve_packaged_overlay_source || true
+if ! resolve_packaged_overlay_source; then
+  say "WARNING: Could not find or download the Superplan overlay companion for ${OVERLAY_PLATFORM:-unknown}/${OVERLAY_ARCH:-unknown}."
+  say "The CLI will be installed without the desktop overlay. You can install it manually later."
+fi
 
 cd "$SOURCE_WORKTREE"
 
@@ -404,7 +430,7 @@ if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
 fi
 
 mkdir -p "$INSTALL_STATE_DIR"
-node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$OVERLAY_ARTIFACT_NAME" "$OVERLAY_PLATFORM" "$OVERLAY_ARCH" "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" <<'EOF'
+node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$OVERLAY_EXECUTABLE_RELATIVE_PATH" "$OVERLAY_ARTIFACT_NAME" "$OVERLAY_PLATFORM" "$OVERLAY_ARCH" "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" <<'EOF'
 const fs = require('node:fs');
 
 const [
@@ -422,6 +448,7 @@ const [
   overlayInstallMethod,
   overlayInstallPath,
   overlayExecutablePath,
+  overlayExecutableRelativePath,
   overlayAssetName,
   overlayPlatform,
   overlayArch,
@@ -454,6 +481,8 @@ if (overlayInstallMethod && overlayInstallPath) {
     install_dir: overlayInstallDir || undefined,
     install_path: overlayInstallPath,
     executable_path: overlayExecutablePath || undefined,
+    // Bug H2: relative path enables stale-path recovery without readdir heuristics
+    executable_relative_path: overlayExecutableRelativePath || undefined,
     platform: overlayPlatform || undefined,
     arch: overlayArch || undefined,
     installed_at: new Date().toISOString(),
