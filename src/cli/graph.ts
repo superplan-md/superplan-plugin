@@ -180,7 +180,7 @@ function parseGraphLayout(
 
     diagnostics.push({
       code: 'GRAPH_TASK_ENTRY_INVALID',
-      message: `Invalid graph layout line: ${line.trim()}`,
+      message: `Invalid graph layout line: ${line.trim()}. Expected format: - \`T-xxx\` Task title`,
       change_id: changeId,
       ...(currentTask ? { task_id: currentTask.task_id } : {}),
     });

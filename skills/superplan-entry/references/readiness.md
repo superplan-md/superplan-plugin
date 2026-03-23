@@ -24,7 +24,7 @@ Action:
 
 - give brief readiness guidance and stop
 - point to installing or exposing the `superplan` command
-- do not tell the user to run `superplan setup` until the CLI itself exists
+- do not tell the user to run `superplan init` until the CLI itself exists
 
 ### `init-missing`
 
@@ -83,7 +83,7 @@ Action:
 
 The March 17 product design settled these as distinct concepts:
 
-- `superplan setup`: machine and agent integration setup
+- `superplan init`: machine and agent integration setup, plus repo-local initialization
 - `superplan init --scope local --yes --json`: repo-local initialization fast path for agent flows
 - global config: `~/.config/superplan/config.toml`
 - workspace config: `<repo>/.superplan/config.toml`

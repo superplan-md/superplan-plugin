@@ -5,7 +5,7 @@ Use this reference when entry routing needs to explain where setup state, init s
 ## Setup Layers
 
 - CLI install: `superplan` must exist as a machine-level command before normal workflow use
-- host setup: `superplan setup` makes Superplan available to the current agent environment
+- host setup: `superplan init` makes Superplan available to the current agent environment
 - workspace init: `superplan init --scope local --yes --json` is the fast agent path that makes the current repo participate in Superplan
 
 Keep these layers distinct in user guidance.
@@ -37,5 +37,5 @@ Do not store these as ad hoc notes in `decisions.md`.
 - inspect config before asking repeated first-run questions
 - do not treat missing workspace config as proof that the CLI is missing
 - do not treat existing workspace config as proof that host setup is complete
-- explain `setup` and `init` as separate visible concepts even when the agent uses the repo-local init shortcut automatically
+- `init` handles both global host setup and repo-local initialization; do not reference a separate `setup` command
 - when the CLI already exists and Superplan should engage, prefer running repo-local init instead of turning init into a user-owned prerequisite
