@@ -50,7 +50,7 @@ Track an active visibility run
   assert.equal(runPayload.ok, true);
   assert.equal(runPayload.data.task_id, 'T-400');
 
-  const blockPayload = parseCliJson(await runCli(['task', 'block', 'T-400', '--reason', 'Waiting on review', '--json'], {
+  const blockPayload = parseCliJson(await runCli(['task', 'runtime', 'block', 'T-400', '--reason', 'Waiting on review', '--json'], {
     cwd: sandbox.cwd,
     env: sandbox.env,
   }));
@@ -80,11 +80,11 @@ Track an active visibility run
   assert.equal(events[1].type, 'overlay.ensure');
   assert.equal(events[1].workflow_phase, 'overlay');
   assert.equal(events[2].run_id, reportPayload.data.report.run_id);
-  assert.equal(events[2].command, 'task block');
+  assert.equal(events[2].command, 'task runtime block');
   assert.equal(events[2].workflow_phase, 'feedback');
   assert.equal(events[2].reason_code, 'Waiting on review');
   assert.equal(events[3].run_id, reportPayload.data.report.run_id);
-  assert.equal(events[3].command, 'task block');
+  assert.equal(events[3].command, 'task runtime block');
   assert.equal(events[3].type, 'overlay.ensure');
   assert.equal(events[3].workflow_phase, 'overlay');
 
@@ -132,13 +132,13 @@ Finish a complete visibility run
     },
   }, null, 2));
 
-  const completePayload = parseCliJson(await runCli(['task', 'complete', 'T-401', '--json'], {
+  const completePayload = parseCliJson(await runCli(['task', 'review', 'complete', 'T-401', '--json'], {
     cwd: sandbox.cwd,
     env: sandbox.env,
   }));
   assert.equal(completePayload.ok, true);
 
-  const approvePayload = parseCliJson(await runCli(['task', 'approve', 'T-401', '--json'], {
+  const approvePayload = parseCliJson(await runCli(['task', 'review', 'approve', 'T-401', '--json'], {
     cwd: sandbox.cwd,
     env: sandbox.env,
   }));

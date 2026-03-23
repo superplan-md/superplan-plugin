@@ -14,4 +14,4 @@
 
 ## Failure Mode
 
-- the skill marks the task complete because the code "obviously" implements the AC
+- the skill marks the task review-complete because the code "obviously" implements the AC

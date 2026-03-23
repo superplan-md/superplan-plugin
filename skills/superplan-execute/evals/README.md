@@ -27,7 +27,7 @@
 - structural drift hands off to `superplan-shape`
 - strategic drift hands off to `superplan-route`
 - blocked and feedback states route through current CLI transitions, not markdown edits
-- runtime corruption or conflicting active tasks route through `task fix` or explicit reset, not ad hoc mutation
+- runtime corruption or conflicting active tasks route through `task repair fix` or explicit reset, not ad hoc mutation
 
 ## Pressure Scenario
 

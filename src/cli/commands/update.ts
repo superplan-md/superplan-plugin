@@ -4,6 +4,7 @@ import * as https from 'node:https';
 import { spawn } from 'node:child_process';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { refreshInstalledSkills, type RefreshInstalledSkillsResult } from './init';
+import { commandNextAction, type NextAction } from '../next-action';
 
 const DEFAULT_REPO_URL = 'https://github.com/superplan-md/superplan-plugin.git';
 const DEFAULT_REF = 'dev';
@@ -63,6 +64,7 @@ export type UpdateResult =
         skills_refreshed: boolean;
         skills_scope: 'skip' | 'global' | 'local' | 'both';
         stopped_processes: number;
+        next_action: NextAction;
       };
     }
   | {
@@ -400,6 +402,10 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
         skills_refreshed: refreshResult.data.refreshed,
         skills_scope: refreshResult.data.scope,
         stopped_processes: stopResult.stopped.length,
+        next_action: commandNextAction(
+          'superplan doctor --json',
+          'The CLI and skills were updated, so the next control-plane step is checking that the install is healthy.',
+        ),
       },
     };
   } catch (error: any) {

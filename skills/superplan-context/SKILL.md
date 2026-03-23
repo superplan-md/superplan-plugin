@@ -97,8 +97,8 @@ Likely handoffs:
 
 ## CLI Hooks
 
-- `superplan context bootstrap`
-- `superplan context status`
+- `superplan context bootstrap --json`
+- `superplan context status --json`
 
 Use the command surface that exists today instead of treating context bootstrap as a manual convention.
 

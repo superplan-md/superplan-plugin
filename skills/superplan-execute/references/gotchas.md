@@ -11,7 +11,7 @@ Record recurring execution traps here.
 - graph-blocked work keeps getting mislabeled as runtime-blocked
 - agents keep inventing a persisted `review` runtime state that does not exist yet
 - stale task contracts keep being used after structural drift
-- runtime conflicts keep being papered over instead of using `task fix` or explicit reset
+- runtime conflicts keep being papered over instead of using `task repair fix` or explicit reset
 
 ## A Surprise Becomes A Gotcha When
 

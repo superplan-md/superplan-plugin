@@ -14,6 +14,7 @@ import {
 } from '../overlay-visibility';
 import { terminateInstalledOverlayCompanion, type OverlayCompanionLaunchResult } from '../overlay-companion';
 import { recordVisibilityEvent } from '../visibility-runtime';
+import { stopNextAction, type NextAction } from '../next-action';
 
 type OverlayRequestedAction = 'ensure' | 'hide';
 type OverlaySubcommand = 'ensure' | 'hide' | 'enable' | 'disable' | 'status';
@@ -36,6 +37,7 @@ export type OverlayResult =
         reason?: 'disabled' | 'empty';
         config_path?: string;
         companion?: OverlayCompanionLaunchResult;
+        next_action: NextAction;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -150,6 +152,10 @@ async function ensureOverlay(): Promise<OverlayResult> {
       attention_state: snapshot.attention_state,
       has_content: visibility.has_content,
       companion: visibility.companion,
+      next_action: stopNextAction(
+        'Return to the main task flow; overlay state is already synchronized.',
+        'Overlay ensure is a visibility operation, not a task-selection step.',
+      ),
       ...(visibility.enabled ? {} : { reason: 'disabled' as const }),
       ...(visibility.enabled && !visibility.has_content ? { reason: 'empty' as const } : {}),
     },
@@ -186,6 +192,10 @@ async function hideOverlay(): Promise<OverlayResult> {
       attention_state: null,
       has_content: false,
       companion: createSkippedCompanionLaunchResult(process.cwd()),
+      next_action: stopNextAction(
+        'Return to the main task flow; the overlay is hidden now.',
+        'Overlay hide only changes visibility.',
+      ),
     },
   };
 }
@@ -227,6 +237,10 @@ async function setOverlayEnabled(enabled: boolean, scope: OverlayPreferenceScope
       attention_state: null,
       has_content: false,
       config_path,
+      next_action: stopNextAction(
+        'Return to the main task flow; overlay preference is updated.',
+        'Changing overlay preference does not change tracked task state.',
+      ),
       ...(enabled ? {} : { reason: 'disabled' as const }),
     },
   };
@@ -257,6 +271,10 @@ async function getOverlayStatus(): Promise<OverlayResult> {
       control_path: paths.control_path,
       attention_state: snapshot.attention_state,
       has_content: hasContent,
+      next_action: stopNextAction(
+        'Return to the main task flow; this command only reported overlay state.',
+        'Overlay status is informational and does not choose work.',
+      ),
       ...(!preferences.effective_enabled ? { reason: 'disabled' as const } : {}),
       ...(preferences.effective_enabled && !hasContent ? { reason: 'empty' as const } : {}),
     },

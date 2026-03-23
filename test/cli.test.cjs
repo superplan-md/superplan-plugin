@@ -9,14 +9,11 @@ test('cli returns NO_COMMAND in json mode', async () => {
   const payload = parseCliJson(result);
 
   assert.equal(result.code, 1);
-  assert.deepEqual(payload, {
-    ok: false,
-    error: {
-      code: 'NO_COMMAND',
-      message: 'No command provided',
-      retryable: false,
-    },
-  });
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, 'NO_COMMAND');
+  assert.equal(payload.error.message, 'No command provided');
+  assert.equal(payload.error.retryable, false);
+  assert.equal(payload.error.next_action.type, 'stop');
 });
 
 test('cli without a command shows the main Superplan command list', async () => {
@@ -24,17 +21,19 @@ test('cli without a command shows the main Superplan command list', async () => 
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Commands:/);
-  assert.match(result.stdout, /Core loop:/);
+  assert.match(result.stdout, /Setup:/);
+  assert.match(result.stdout, /Authoring:/);
+  assert.match(result.stdout, /Execution:/);
   assert.match(result.stdout, /change\s+Create tracked change scaffolding/);
-  assert.match(result.stdout, /init\s+Scaffold the repo-local Superplan workspace/);
+  assert.match(result.stdout, /init\s+Scaffold the repo-local or machine-level Superplan workspace/);
   assert.match(result.stdout, /status\s+Show active, ready, review, blocked, and feedback-needed queues/);
-  assert.match(result.stdout, /Recovery and diagnostics:/);
+  assert.match(result.stdout, /Diagnostics:/);
   assert.match(result.stdout, /sync\s+Reconcile repo state after task-file edits or runtime drift/);
   assert.match(result.stdout, /validate\s+Validate tasks\.md graph and task-contract consistency/);
   assert.match(result.stdout, /visibility\s+Inspect run visibility and health evidence/);
   assert.match(result.stdout, /doctor\s+Validate install and overlay health/);
   assert.match(result.stdout, /parse\s+Parse task contracts and return diagnostics/);
-  assert.match(result.stdout, /Installation and admin:/);
+  assert.match(result.stdout, /Admin:/);
   assert.match(result.stdout, /update\s+Update an installed Superplan CLI and refresh skills/);
   assert.match(result.stdout, /remove\s+Remove Superplan installation or state/);
   assert.doesNotMatch(result.stdout, /server\s+Start the local dummy server/);
@@ -59,14 +58,11 @@ test('cli returns UNKNOWN_COMMAND for invalid command', async () => {
   const payload = parseCliJson(result);
 
   assert.equal(result.code, 1);
-  assert.deepEqual(payload, {
-    ok: false,
-    error: {
-      code: 'UNKNOWN_COMMAND',
-      message: 'Unknown command: unknown-command',
-      retryable: false,
-    },
-  });
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, 'UNKNOWN_COMMAND');
+  assert.equal(payload.error.message, 'Unknown command: unknown-command');
+  assert.equal(payload.error.retryable, false);
+  assert.equal(payload.error.next_action.type, 'stop');
 });
 
 test('server is no longer part of the surfaced command set', async () => {
@@ -74,14 +70,10 @@ test('server is no longer part of the surfaced command set', async () => {
   const payload = parseCliJson(result);
 
   assert.equal(result.code, 1);
-  assert.deepEqual(payload, {
-    ok: false,
-    error: {
-      code: 'UNKNOWN_COMMAND',
-      message: 'Unknown command: server',
-      retryable: false,
-    },
-  });
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, 'UNKNOWN_COMMAND');
+  assert.equal(payload.error.message, 'Unknown command: server');
+  assert.equal(payload.error.next_action.type, 'stop');
 });
 
 test('purge is no longer part of the surfaced command set', async () => {
@@ -89,14 +81,10 @@ test('purge is no longer part of the surfaced command set', async () => {
   const payload = parseCliJson(result);
 
   assert.equal(result.code, 1);
-  assert.deepEqual(payload, {
-    ok: false,
-    error: {
-      code: 'UNKNOWN_COMMAND',
-      message: 'Unknown command: purge',
-      retryable: false,
-    },
-  });
+  assert.equal(payload.ok, false);
+  assert.equal(payload.error.code, 'UNKNOWN_COMMAND');
+  assert.equal(payload.error.message, 'Unknown command: purge');
+  assert.equal(payload.error.next_action.type, 'stop');
 });
 
 test('task command in quiet mode stays agent-safe json', async () => {
@@ -106,7 +94,8 @@ test('task command in quiet mode stays agent-safe json', async () => {
   assert.equal(result.code, 1);
   assert.equal(payload.ok, false);
   assert.equal(payload.error.code, 'INVALID_TASK_COMMAND');
-  assert.match(payload.error.message, /Available task commands:/);
+  assert.match(payload.error.message, /Inspect:/);
+  assert.equal(payload.error.next_action.type, 'stop');
 });
 
 test('task --help explains task subcommands explicitly', async () => {
@@ -116,14 +105,18 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.match(result.stdout, /Task lifecycle:/);
   assert.match(result.stdout, /run -> complete -> approve/);
   assert.match(result.stdout, /complete moves finished implementation into review; approve is final signoff that marks the task done\./);
-  assert.match(result.stdout, /Task commands:/);
-  assert.match(result.stdout, /new <change-slug>\s+Scaffold one graph-declared task contract/);
-  assert.match(result.stdout, /batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);
-  assert.match(result.stdout, /show <task_id>\s+Show one task and its readiness details/);
-  assert.match(result.stdout, /complete <task_id>\s+Finish implementation and send the task to review/);
-  assert.match(result.stdout, /approve <task_id>\s+Approve an in-review task and mark it done/);
-  assert.match(result.stdout, /reopen <task_id>\s+Move a review or done task back into implementation/);
-  assert.match(result.stdout, /block <task_id> --reason\s+Pause a task because something external is blocking it/);
+  assert.match(result.stdout, /Inspect:/);
+  assert.match(result.stdout, /Scaffold:/);
+  assert.match(result.stdout, /Review:/);
+  assert.match(result.stdout, /Runtime:/);
+  assert.match(result.stdout, /Repair:/);
+  assert.match(result.stdout, /inspect show <task_id>\s+Show one task and its readiness details/);
+  assert.match(result.stdout, /scaffold new <change-slug>\s+Scaffold one graph-declared task contract/);
+  assert.match(result.stdout, /scaffold batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);
+  assert.match(result.stdout, /review complete <task_id>\s+Finish implementation and send the task to review/);
+  assert.match(result.stdout, /review approve <task_id>\s+Approve an in-review task and mark it done/);
+  assert.match(result.stdout, /review reopen <task_id>\s+Move a review or done task back into implementation/);
+  assert.match(result.stdout, /runtime block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run --json/);
   assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, validate it, then scaffold task contracts from graph-declared ids/i);
   assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
@@ -175,7 +168,7 @@ Blocked by dependency
 - [ ] A
 `);
 
-  const showResult = await runCli(['task', 'show', 'T-001', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const showResult = await runCli(['task', 'inspect', 'show', 'T-001', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const showPayload = parseCliJson(showResult);
 
   assert.equal(showResult.code, 0);
@@ -204,7 +197,7 @@ test('removed task diagnostic commands fail fast and point users to the leaner l
   const whyPayload = parseCliJson(await runCli(['task', 'why', 'T-001', '--json']));
   assert.equal(whyPayload.ok, false);
   assert.equal(whyPayload.error.code, 'INVALID_TASK_COMMAND');
-  assert.match(whyPayload.error.message, /show <task_id>/);
+  assert.match(whyPayload.error.message, /task inspect show <task_id>/);
 
   const whyNextPayload = parseCliJson(await runCli(['task', 'why-next', '--json']));
   assert.equal(whyNextPayload.ok, false);
@@ -229,7 +222,7 @@ test('removed task diagnostic commands fail fast and point users to the leaner l
   const submitReviewPayload = parseCliJson(await runCli(['task', 'submit-review', 'T-001', '--json']));
   assert.equal(submitReviewPayload.ok, false);
   assert.equal(submitReviewPayload.error.code, 'INVALID_TASK_COMMAND');
-  assert.match(submitReviewPayload.error.message, /Use "complete" instead\./);
+  assert.match(submitReviewPayload.error.message, /Use "task review complete" instead\./);
 });
 
 test('overlay show was merged into ensure', async () => {

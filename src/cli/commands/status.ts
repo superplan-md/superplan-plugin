@@ -1,4 +1,5 @@
 import { loadTasks, sortTasksByPriorityAndId, type ParsedTask } from './task';
+import { getQueueNextAction, type NextAction } from '../next-action';
 
 export type StatusResult =
   | {
@@ -9,6 +10,7 @@ export type StatusResult =
         in_review: string[];
         blocked: string[];
         needs_feedback: string[];
+        next_action: NextAction;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -33,14 +35,23 @@ export async function status(): Promise<StatusResult> {
   const blockedTasks = tasks.filter(taskItem => taskItem.status === 'blocked').map(taskItem => taskItem.task_id);
   const needsFeedbackTasks = tasks.filter(taskItem => taskItem.status === 'needs_feedback').map(taskItem => taskItem.task_id);
 
-  return {
-    ok: true,
-    data: {
+  const data = {
+    active: activeTask?.task_id ?? null,
+    ready: readyTasks,
+    in_review: sortTaskIds(inReviewTasks),
+    blocked: sortTaskIds(blockedTasks),
+    needs_feedback: sortTaskIds(needsFeedbackTasks),
+    next_action: getQueueNextAction({
       active: activeTask?.task_id ?? null,
       ready: readyTasks,
       in_review: sortTaskIds(inReviewTasks),
       blocked: sortTaskIds(blockedTasks),
       needs_feedback: sortTaskIds(needsFeedbackTasks),
-    },
+    }),
+  };
+
+  return {
+    ok: true,
+    data,
   };
 }

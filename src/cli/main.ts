@@ -6,10 +6,15 @@ import { getTaskCommandHelpMessage } from './commands/task';
 import { getOverlayCommandHelpMessage } from './commands/overlay';
 import { getVisibilityCommandHelpMessage } from './commands/visibility';
 import { getRemoveCommandHelpMessage } from './commands/remove';
+import { stopNextAction, type NextAction } from './next-action';
 
 const { version } = require('../../package.json') as { version: string };
 
-function printJsonResult(result: { ok: boolean; data?: unknown; error?: { code: string; message: string; retryable: boolean } | null }) {
+function printJsonResult(result: {
+  ok: boolean;
+  data?: unknown;
+  error?: { code: string; message: string; retryable: boolean; next_action?: NextAction } | null;
+}) {
   if (result.ok) {
     console.log(JSON.stringify({
       ok: true,
@@ -25,6 +30,10 @@ function printJsonResult(result: { ok: boolean; data?: unknown; error?: { code: 
       code: 'UNKNOWN_ERROR',
       message: 'An unknown error occurred',
       retryable: false,
+      next_action: stopNextAction(
+        'The CLI hit an unknown top-level error and cannot infer a safe follow-up command.',
+        'A human needs to inspect the error instead of having the agent guess from the command surface.',
+      ),
     },
   }, null, 2));
 }
@@ -36,23 +45,27 @@ Usage:
   superplan <command>
 
 Commands:
-  Core loop:
+  Setup:
+    init       Scaffold the repo-local or machine-level Superplan workspace
+    context    Create or inspect durable workspace context artifacts
+
+  Authoring:
+    change     Create tracked change scaffolding
+
+  Execution:
     status     Show active, ready, review, blocked, and feedback-needed queues
     run        Start, resume, or continue tracked work
     task       Inspect or transition one tracked task
-    change     Create tracked change scaffolding
-    context    Create or inspect durable workspace context artifacts
-    init       Scaffold the repo-local Superplan workspace
 
-  Recovery and diagnostics:
+  Diagnostics:
     parse      Parse task contracts and return diagnostics
     validate   Validate tasks.md graph and task-contract consistency
     sync       Reconcile repo state after task-file edits or runtime drift
-    overlay    Overlay companion operations
-    visibility Inspect run visibility and health evidence
     doctor     Validate install and overlay health
+    visibility Inspect run visibility and health evidence
+    overlay    Overlay companion operations
 
-  Installation and admin:
+  Admin:
     update     Update an installed Superplan CLI and refresh skills
     remove     Remove Superplan installation or state
 
@@ -189,6 +202,10 @@ async function main() {
           code: 'NO_COMMAND',
           message: 'No command provided',
           retryable: false,
+          next_action: stopNextAction(
+            'No command was provided. Choose one top-level command intentionally for the current workflow phase.',
+            'The CLI should not guess a top-level intent when no command was supplied.',
+          ),
         },
       });
       process.exitCode = 1;
@@ -206,6 +223,10 @@ async function main() {
         code: 'UNKNOWN_COMMAND',
         message: `Unknown command: ${command}`,
         retryable: false,
+        next_action: stopNextAction(
+          `Top-level command "${command}" does not exist. Choose a supported top-level command intentionally.`,
+          'Unknown top-level commands should terminate instead of sending the agent into menu exploration.',
+        ),
       },
     });
     process.exitCode = 1;

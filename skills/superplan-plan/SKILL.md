@@ -28,7 +28,7 @@ Use when:
 - use exact artifact targets, verification paths, and handoffs rather than vague prose
 - pull in `.superplan/context/`, `.superplan/decisions.md`, and `.superplan/gotchas.md` when they materially affect the path
 - keep specs and plans distinct: specs capture target truth, plans capture trajectory
-- when the plan already defines two or more new task contracts that are ready to author now, prefer handing off one `superplan task batch <change-slug> --stdin --json` scaffold step instead of repeated `superplan task new` calls
+- when the plan already defines two or more new task contracts that are ready to author now, prefer handing off one `superplan task scaffold batch <change-slug> --stdin --json` scaffold step instead of repeated `superplan task scaffold new` calls
 
 ## Plan Discipline
 
@@ -85,11 +85,11 @@ When the proof path is known, write it in explicit command style:
 When the plan includes task scaffolding, be explicit:
 
 - do not hand-create individual `tasks/T-xxx.md` files in the plan or handoff
-- do not propose shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs for task-file creation; shell is fine only when used to pipe JSON into `superplan task batch --stdin --json`
+- do not propose shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs for task-file creation; shell is fine only when used to pipe JSON into `superplan task scaffold batch --stdin --json`
 - author `.superplan/changes/<change-slug>/tasks.md` first and include explicit `task_id` ownership there before proposing task scaffolding
 - run `superplan validate <change-slug> --json` before task scaffolding so graph errors fail fast
-- use `superplan task new <change-slug> --task-id <task_id> --json` only when one graph-declared task contract should be created now
-- use `superplan task batch --stdin --json` when two or more graph-declared task contracts are already clear enough to author in one pass
+- use `superplan task scaffold new <change-slug> --task-id <task_id> --json` only when one graph-declared task contract should be created now
+- use `superplan task scaffold batch --stdin --json` when two or more graph-declared task contracts are already clear enough to author in one pass
 - when a graph and dependencies are already clear for multiple tasks, prefer one batch authoring step over repeated single-task creation
 - prefer stdin over temporary files in agent-driven task authoring
 

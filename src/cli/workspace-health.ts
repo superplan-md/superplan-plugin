@@ -63,7 +63,7 @@ function taskStateIssues(task: ParsedTask, runtimeTask: RuntimeTaskState | undef
     issues.push({
       code: 'TASK_STATE_DRIFT_PENDING_WITH_COMPLETED_ACCEPTANCE',
       message: `Task ${task.task_id} still says pending even though all acceptance criteria are checked.`,
-      fix: `Run superplan task complete ${task.task_id} --json or update the task contract status intentionally.`,
+      fix: `Run superplan task review complete ${task.task_id} --json or update the task contract status intentionally.`,
       task_id: task.task_id,
     });
   }

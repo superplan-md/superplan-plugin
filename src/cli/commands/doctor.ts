@@ -11,6 +11,7 @@ import { inspectOverlayCompanionInstall } from '../overlay-companion';
 import { readOverlayPreferences } from '../overlay-preferences';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { collectWorkspaceHealthIssues } from '../workspace-health';
+import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
 interface DoctorIssue {
   code: string;
@@ -121,6 +122,17 @@ function getProjectAgents(baseDir: string): (AgentEnvironment & { skillsPaths: s
       install_path: path.join(baseDir, '.opencode', 'skills'),
       install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
+    },
+    {
+      name: 'amazonq',
+      path: path.join(baseDir, '.amazonq'),
+      skillsPaths: [
+        path.join(baseDir, '.amazonq', 'rules', 'superplan-entry.md'),
+        path.join(baseDir, '.amazonq', 'rules', 'memory-bank', 'guidelines.md'),
+      ],
+      install_path: path.join(baseDir, '.amazonq', 'rules'),
+      install_kind: 'amazonq_rules',
+      bootstrap_strength: 'rule_bootstrap',
     },
     {
       name: 'antigravity',
@@ -269,7 +281,7 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
     issues.push({
       code: 'RUNTIME_CONFLICT_MULTIPLE_IN_PROGRESS',
       message: 'Multiple tasks are currently in progress',
-      fix: 'Run superplan task fix',
+      fix: 'superplan task repair fix --json',
     });
   }
 
@@ -281,7 +293,7 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
     issues.push({
       code: 'RUNTIME_CONFLICT_UNKNOWN_TASK',
       message: `Runtime state exists for unknown task ${taskId}`,
-      fix: `Run superplan task reset ${taskId}`,
+      fix: `superplan task repair reset ${taskId} --json`,
       task_id: taskId,
     });
   }
@@ -293,7 +305,7 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
       issues.push({
         code: 'RUNTIME_CONFLICT_INVALID_IN_PROGRESS',
         message: `In-progress task ${taskId} is invalid`,
-        fix: 'Run superplan task fix',
+        fix: 'superplan task repair fix --json',
         task_id: taskId,
       });
       continue;
@@ -304,7 +316,7 @@ async function collectDeepIssues(cwd: string): Promise<DoctorIssue[]> {
       issues.push({
         code: 'RUNTIME_CONFLICT_DEPENDENCY_NOT_SATISFIED',
         message: `In-progress task ${taskId} has unsatisfied dependencies`,
-        fix: 'Run superplan task fix',
+        fix: 'superplan task repair fix --json',
         task_id: taskId,
       });
     }
@@ -383,6 +395,22 @@ export async function doctor(args: string[] = []) {
     data: {
       valid: issues.length === 0,
       issues,
+      next_action: issues.length === 0
+        ? commandNextAction(
+          'superplan status --json',
+          'Install and workspace health checks passed, so the next useful step is continuing tracked work.',
+        )
+        : (
+          issues[0]?.fix
+            ? commandNextAction(
+              issues[0].fix,
+              `The first blocking health issue is ${issues[0].code}, so apply its recommended fix before continuing.`,
+            )
+            : stopNextAction(
+              'Resolve the reported health issues before relying on Superplan state.',
+              'Health checks found blocking issues and no single automated fix was available.',
+            )
+        ),
     },
   };
 }

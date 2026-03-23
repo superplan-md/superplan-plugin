@@ -177,21 +177,21 @@ function inferLegacyCommand(type: string): string {
     case 'task.started':
       return 'task start';
     case 'task.blocked':
-      return 'task block';
+      return 'task runtime block';
     case 'task.feedback_requested':
-      return 'task request-feedback';
+      return 'task runtime request-feedback';
     case 'task.resumed':
       return 'task resume';
     case 'task.review_requested':
-      return 'task complete';
+      return 'task review complete';
     case 'task.approved':
-      return 'task approve';
+      return 'task review approve';
     case 'task.reopened':
-      return 'task reopen';
+      return 'task review reopen';
     case 'task.reset':
-      return 'task reset';
+      return 'task repair reset';
     case 'task.complete_failed':
-      return 'task complete';
+      return 'task review complete';
     case 'overlay.ensure':
       return 'overlay ensure';
     case 'overlay.hide':
@@ -665,4 +665,3 @@ export async function buildAndWriteVisibilityReport(options: {
 
   return report;
 }
-

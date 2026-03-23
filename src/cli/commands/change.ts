@@ -15,6 +15,7 @@ import {
   pathExists,
 } from './scaffold';
 import { ensureChangeArtifacts } from '../workspace-artifacts';
+import { stopNextAction, type NextAction } from '../next-action';
 
 export type ChangeResult =
   | {
@@ -23,6 +24,7 @@ export type ChangeResult =
         change_id: string;
         root: string;
         files: string[];
+        next_action: NextAction;
         overlay?: OverlayRuntimeNotice;
       };
     }
@@ -153,17 +155,21 @@ async function createChange(changeSlug: string, title?: string): Promise<ChangeR
 
   return {
     ok: true,
-    data: {
-      change_id: changeSlug,
-      root: path.relative(process.cwd(), changePaths.changeRoot) || changePaths.changeRoot,
-      files: [
-        path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath,
-        path.relative(process.cwd(), changePaths.tasksDir) || changePaths.tasksDir,
-        ...extraFiles.map(filePath => path.relative(process.cwd(), filePath) || filePath),
-      ],
-      ...(overlay ? { overlay } : {}),
-    },
-  };
+      data: {
+        change_id: changeSlug,
+        root: path.relative(process.cwd(), changePaths.changeRoot) || changePaths.changeRoot,
+        files: [
+          path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath,
+          path.relative(process.cwd(), changePaths.tasksDir) || changePaths.tasksDir,
+          ...extraFiles.map(filePath => path.relative(process.cwd(), filePath) || filePath),
+        ],
+        next_action: stopNextAction(
+          `Author ${path.relative(process.cwd(), changePaths.tasksIndexPath) || changePaths.tasksIndexPath} as the graph truth for this change before scaffolding tasks.`,
+          'The change scaffold exists now; the next step is to define the task graph before validation or task scaffolding.',
+        ),
+        ...(overlay ? { overlay } : {}),
+      },
+    };
 }
 
 async function refreshChangeOverlay(): Promise<OverlayRuntimeNotice | undefined> {

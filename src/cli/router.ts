@@ -12,6 +12,11 @@ import { overlay } from "./commands/overlay";
 import { update } from "./commands/update";
 import { validate } from "./commands/validate";
 import { visibility } from "./commands/visibility";
+import {
+  commandNextAction,
+  stopNextAction,
+  type NextAction,
+} from "./next-action";
 
 type CommandOptions = {
   json: boolean;
@@ -23,7 +28,7 @@ type CommandOptions = {
 type CommandResult = {
   ok: boolean;
   data?: unknown;
-  error?: { code: string; message: string; retryable: boolean };
+  error?: { code: string; message: string; retryable: boolean; next_action?: NextAction };
 };
 
 type CommandHandler = (
@@ -61,8 +66,156 @@ function normalizeCliResult(result: CommandResult) {
       code: "UNKNOWN_ERROR",
       message: "An unknown error occurred",
       retryable: false,
+      next_action: stopNextAction(
+        'The CLI hit an unknown routed-command error and cannot infer a safe follow-up command.',
+        'A human needs to inspect the routed-command failure instead of having the agent guess.',
+      ),
     },
   };
+}
+
+function inferErrorNextAction(command: string | undefined, error: { code: string; message: string; retryable: boolean; next_action?: NextAction }): NextAction | undefined {
+  if (error.next_action) {
+    return error.next_action;
+  }
+
+  if (error.code === 'INVALID_TASK_COMMAND') {
+    return stopNextAction(
+      'The task command is invalid. Use a phase namespace such as inspect, scaffold, review, runtime, or repair.',
+      'Invalid task commands should terminate instead of sending the agent to browse help output.',
+    );
+  }
+
+  if (error.code === 'INVALID_CHANGE_COMMAND') {
+    return stopNextAction(
+      'The change command is invalid. The only supported change action is `superplan change new <slug> --json`.',
+      'Invalid change invocations should terminate with one explicit surface description.',
+    );
+  }
+
+  if (error.code === 'INVALID_CONTEXT_COMMAND') {
+    return stopNextAction(
+      'The context command is invalid. Use `superplan context bootstrap --json` or `superplan context status --json`.',
+      'Invalid context invocations should terminate with the exact supported commands.',
+    );
+  }
+
+  if (error.code === 'INVALID_OVERLAY_COMMAND') {
+    return stopNextAction(
+      'The overlay command is invalid. Use `overlay enable`, `disable`, `status`, `ensure`, or `hide`.',
+      'Invalid overlay invocations should terminate with the exact supported commands.',
+    );
+  }
+
+  if (error.code === 'INVALID_VISIBILITY_COMMAND') {
+    return stopNextAction(
+      'The visibility command is invalid. The supported action is `superplan visibility report --json`.',
+      'Invalid visibility invocations should terminate with the exact supported command.',
+    );
+  }
+
+  if (error.code === 'INVALID_REMOVE_COMMAND') {
+    return stopNextAction(
+      'The remove command is invalid. Use `superplan remove --scope <local|global|skip> --yes --json` for automation.',
+      'Invalid remove invocations should terminate with the exact supported non-interactive form.',
+    );
+  }
+
+  if (error.code === 'INVALID_INIT_COMMAND' || error.code === 'INTERACTIVE_REQUIRED') {
+    return stopNextAction(
+      'The init invocation is invalid for the current mode. Use `superplan init --scope <local|global|both|skip> --yes --json` for automation.',
+      'Invalid init invocations should terminate with the exact supported non-interactive form.',
+    );
+  }
+
+  if (error.code === 'INVALID_RUN_COMMAND') {
+    return commandNextAction(
+      'superplan run --json',
+      'Run only supports zero or one explicit task id.',
+    );
+  }
+
+  if (error.code === 'INIT_REQUIRED') {
+    return commandNextAction(
+      'superplan init --scope local --yes --json',
+      'The requested command depends on repo-local Superplan state that does not exist yet.',
+    );
+  }
+
+  if (error.code === 'TASK_IN_REVIEW' || error.code === 'TASK_ALREADY_COMPLETED' || error.code === 'TASK_NOT_IN_REVIEW' || error.code === 'TASK_NOT_REVIEWABLE') {
+    return stopNextAction(
+      'The task is in a review-only lifecycle branch. Use `superplan task review approve <task_id> --json` or `superplan task review reopen <task_id> --reason "..." --json` intentionally.',
+      'The task is currently in a review-only lifecycle branch.',
+    );
+  }
+
+  if (error.code === 'TASK_NOT_IN_PROGRESS' || error.code === 'TASK_NOT_STARTED' || error.code === 'TASK_NOT_READY') {
+    return commandNextAction(
+      'superplan status --json',
+      'The requested transition does not match the current runtime state.',
+    );
+  }
+
+  if (error.code === 'TASK_NOT_COMPLETE') {
+    return stopNextAction(
+      'The task is not complete yet. Finish the acceptance criteria before moving it into or through review.',
+      'The task is not actually complete yet.',
+    );
+  }
+
+  if (error.code === 'TASK_NOT_IN_GRAPH') {
+    return stopNextAction(
+      'The task id is not declared in the change graph. Add it to tasks.md, validate the graph, then scaffold it again.',
+      'Task scaffolding only works for graph-declared task ids.',
+    );
+  }
+
+  if (error.code === 'TASK_NOT_FOUND') {
+    return commandNextAction(
+      'superplan status --json',
+      'The requested task id does not exist in the current workspace state.',
+    );
+  }
+
+  if (error.code === 'USER_ABORTED') {
+    return stopNextAction(
+      'The command was aborted intentionally by the user.',
+      'The automation loop should stop rather than infer a replacement action.',
+    );
+  }
+
+  if (error.code === 'CHANGE_EXISTS') {
+    return stopNextAction(
+      'That change slug already exists. Choose a different change slug or continue the existing change intentionally.',
+      'Creating the same change again should not trigger an automatic fallback command.',
+    );
+  }
+
+  if (error.code === 'VISIBILITY_REPORT_UNAVAILABLE') {
+    return commandNextAction(
+      'superplan status --json',
+      'No visibility report exists yet; return to the live frontier instead.',
+    );
+  }
+
+  if (error.code === 'TASK_BATCH_INPUT_REQUIRED' || error.code === 'TASK_BATCH_INPUT_CONFLICT') {
+    return stopNextAction(
+      'Task batch needs exactly one JSON input source. Use `--stdin` for automation or `--file <path>`, but not both.',
+      'Task scaffolding should stop until its input source is explicit.',
+    );
+  }
+
+  if (error.code === 'INIT_VERIFICATION_FAILED') {
+    return commandNextAction(
+      'superplan doctor --json',
+      'Init verification failed, so inspect install and workspace health before continuing.',
+    );
+  }
+
+  return stopNextAction(
+    `No deterministic recovery rule matched error code ${error.code}.`,
+    'The automation loop should stop rather than guess a fallback command.',
+  );
 }
 
 export const router: Record<string, CommandHandler> = {
@@ -110,6 +263,9 @@ export async function routeCommand(args: string[]) {
 
   if (handler) {
     const result = await handler(commandArgs, options);
+    if (!result.ok && result.error) {
+      result.error.next_action = inferErrorNextAction(command, result.error);
+    }
     if (
       hasError(result) &&
       !options.json &&

@@ -4,6 +4,7 @@ import { loadChangeGraph, type ChangeGraph } from '../graph';
 import { parse, type ParseDiagnostic, type ParsedTask } from './parse';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { collectWorkspaceHealthIssues, workspaceIssuesToDiagnostics } from '../workspace-health';
+import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
 interface ValidateChangeResult {
   change_id: string;
@@ -20,6 +21,7 @@ export type ValidateResult =
         valid: boolean;
         changes: ValidateChangeResult[];
         diagnostics: ParseDiagnostic[];
+        next_action: NextAction;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -105,6 +107,10 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
             message: 'No .superplan/changes directory found. Run superplan init.',
           },
         ],
+        next_action: commandNextAction(
+          'superplan init --scope local --yes --json',
+          'Validation cannot run until the repo-local Superplan workspace exists.',
+        ),
       },
     };
   }
@@ -148,6 +154,15 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
       valid: dedupedDiagnostics.length === 0 && workspaceHealthDiagnostics.length === 0,
       changes,
       diagnostics: dedupeDiagnostics([...dedupedDiagnostics, ...workspaceHealthDiagnostics]),
+      next_action: dedupedDiagnostics.length === 0 && workspaceHealthDiagnostics.length === 0
+        ? commandNextAction(
+          'superplan status --json',
+          'Validation passed, so the next useful control-plane step is checking or continuing runnable work.',
+        )
+        : stopNextAction(
+          'Fix the reported validation issues before using the runtime loop or scaffolding more task contracts.',
+          'The graph or task contracts are inconsistent, so the workflow should not continue as if state were trustworthy.',
+        ),
     },
   };
 }

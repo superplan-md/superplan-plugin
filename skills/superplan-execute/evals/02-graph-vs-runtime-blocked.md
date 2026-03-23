@@ -19,5 +19,5 @@
 ## Fail If
 
 - the skill calls both states just "blocked" without distinction
-- the skill tries to `task block` a task that never started
+- the skill tries to `task runtime block` a task that never started
 - the skill treats dependency blockage as execution evidence

@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { loadChangeGraph } from '../graph';
 import { resolveWorkspaceRoot } from '../workspace-root';
+import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
 interface ParseOptions {
   json?: boolean;
@@ -36,7 +37,7 @@ export interface ParsedTask {
 }
 
 type ParseResult =
-  | { ok: true; data: { tasks: ParsedTask[]; diagnostics: ParseDiagnostic[] } }
+  | { ok: true; data: { tasks: ParsedTask[]; diagnostics: ParseDiagnostic[]; next_action: NextAction } }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
 
 function parseStringArray(value: string): string[] {
@@ -560,6 +561,10 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
               message: 'No .superplan/changes directory found. Run superplan init.',
             },
           ],
+          next_action: commandNextAction(
+            'superplan init --scope local --yes --json',
+            'Parsing cannot proceed until the repo-local Superplan workspace exists.',
+          ),
         },
       };
     }
@@ -580,7 +585,18 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
       const parsedSingleFile = await parseSingleTaskFile(resolvedInputPath);
       return {
         ok: true,
-        data: parsedSingleFile,
+        data: {
+          ...parsedSingleFile,
+          next_action: parsedSingleFile.diagnostics.length > 0
+            ? stopNextAction(
+              'Fix the reported task-file diagnostics before relying on this task.',
+              'The parsed task file still has diagnostics that need resolution.',
+            )
+            : commandNextAction(
+              'superplan status --json',
+              'The task file parsed cleanly, so the next useful control-plane step is checking the frontier.',
+            ),
+        },
       };
     }
 
@@ -599,6 +615,15 @@ export async function parse(args: string[], _options: ParseOptions): Promise<Par
       data: {
         tasks,
         diagnostics,
+        next_action: diagnostics.length > 0
+          ? stopNextAction(
+            'Fix the reported task-file or graph diagnostics before relying on the runtime loop.',
+            'The parsed task set is not clean, so execution should not continue blindly.',
+          )
+          : commandNextAction(
+            'superplan status --json',
+            'The task files parsed cleanly, so the next useful control-plane step is checking the frontier.',
+          ),
       },
     };
   } catch {

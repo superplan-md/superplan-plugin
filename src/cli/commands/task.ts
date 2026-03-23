@@ -9,6 +9,12 @@ import {
   type OverlayRuntimeNotice,
   type OverlayVisibilityApplyResult,
 } from '../overlay-visibility';
+import {
+  commandNextAction,
+  stopNextAction,
+  waitForUserNextAction,
+  type NextAction,
+} from '../next-action';
 import { resolveSuperplanRoot } from '../workspace-root';
 import type { OverlayEventKind, OverlayRequestedAction } from '../../shared/overlay';
 import {
@@ -125,35 +131,49 @@ interface TaskCommandSuccessData {
   fixed?: boolean;
   actions?: TaskFixAction[];
   overlay?: OverlayRuntimeNotice;
+  next_action?: NextAction;
 }
 
 type TaskCommandResult =
   | { ok: true; data: TaskCommandSuccessData }
   | TaskErrorResult;
 
-const TASK_SUBCOMMANDS = new Set([
-  'show',
-  'new',
-  'batch',
-  'complete',
-  'approve',
-  'reopen',
-  'fix',
-  'reset',
-  'block',
-  'request-feedback',
+const TASK_NAMESPACES = new Set([
+  'inspect',
+  'scaffold',
+  'review',
+  'runtime',
+  'repair',
 ]);
+
+const TASK_NAMESPACE_ACTIONS: Record<string, Set<string>> = {
+  inspect: new Set(['show']),
+  scaffold: new Set(['new', 'batch']),
+  review: new Set(['complete', 'approve', 'reopen']),
+  runtime: new Set(['block', 'request-feedback']),
+  repair: new Set(['fix', 'reset']),
+};
 
 const REMOVED_TASK_SUBCOMMAND_GUIDANCE: Record<string, string> = {
   current: 'Use "status" to see the active task or "run" to continue it.',
   events: 'No direct replacement in the local MVP loop.',
-  list: 'Use "status" for the frontier summary or "show <task_id>" for a specific task.',
+  list: 'Use "status" for the frontier summary or "task inspect show <task_id>" for a specific task.',
   next: 'Use "run" to choose or continue work.',
   start: 'Use "run <task_id>" instead.',
   resume: 'Use "run <task_id>" instead.',
-  why: 'Use "show <task_id>" instead.',
+  why: 'Use "task inspect show <task_id>" instead.',
   'why-next': 'Use "run" to choose work or "status" to inspect the frontier.',
-  'submit-review': 'Use "complete" instead.',
+  'submit-review': 'Use "task review complete" instead.',
+  show: 'Use "task inspect show <task_id>" instead.',
+  new: 'Use "task scaffold new <change-slug> --task-id <task_id>" instead.',
+  batch: 'Use "task scaffold batch <change-slug> --stdin" instead.',
+  complete: 'Use "task review complete <task_id>" instead.',
+  approve: 'Use "task review approve <task_id>" instead.',
+  reopen: 'Use "task review reopen <task_id>" instead.',
+  block: 'Use "task runtime block <task_id> --reason ..." instead.',
+  'request-feedback': 'Use "task runtime request-feedback <task_id> --message ..." instead.',
+  fix: 'Use "task repair fix" instead.',
+  reset: 'Use "task repair reset <task_id>" instead.',
 };
 
 function getRuntimePaths(): RuntimePaths {
@@ -240,22 +260,22 @@ async function appendEvent(
   const defaultCommand = (() => {
     switch (type) {
       case 'task.started':
-        return 'task start';
+        return 'run';
       case 'task.complete_failed':
       case 'task.review_requested':
-        return 'task complete';
+        return 'task review complete';
       case 'task.approved':
-        return 'task approve';
+        return 'task review approve';
       case 'task.reopened':
-        return 'task reopen';
+        return 'task review reopen';
       case 'task.blocked':
-        return 'task block';
+        return 'task runtime block';
       case 'task.feedback_requested':
-        return 'task request-feedback';
+        return 'task runtime request-feedback';
       case 'task.resumed':
-        return 'task resume';
+        return 'run';
       case 'task.reset':
-        return 'task reset';
+        return 'task repair reset';
       default:
         return type;
     }
@@ -360,17 +380,20 @@ function getTaskInvalidError(): TaskErrorResult {
 }
 
 export function getTaskCommandHelpMessage(options: {
-  subcommand?: string;
+  namespace?: string;
+  action?: string;
   requiresTaskId?: boolean;
   requiredArgumentLabel?: string;
 }): string {
-  const { subcommand, requiresTaskId, requiredArgumentLabel } = options;
+  const { namespace, action, requiresTaskId, requiredArgumentLabel } = options;
 
-  let intro = 'Superplan task command requires a subcommand.';
-  if (subcommand && !requiresTaskId) {
-    intro = `Unknown task subcommand: ${subcommand}`;
-  } else if (subcommand && requiresTaskId) {
-    intro = `Task command "${subcommand}" requires a ${requiredArgumentLabel ?? '<task_id>'}.`;
+  let intro = 'Superplan task requires a phase namespace and action.';
+  if (namespace && !action && !requiresTaskId) {
+    intro = `Task namespace "${namespace}" requires an action.`;
+  } else if (namespace && action && !requiresTaskId) {
+    intro = `Unknown task action: ${namespace} ${action}`;
+  } else if (namespace && action && requiresTaskId) {
+    intro = `Task command "${namespace} ${action}" requires a ${requiredArgumentLabel ?? '<task_id>'}.`;
   }
 
   return [
@@ -381,37 +404,43 @@ export function getTaskCommandHelpMessage(options: {
     '  complete moves finished implementation into review; approve is final signoff that marks the task done.',
     '  after verification passes, do not leave the task sitting in pending or in_progress without an explicit blocker.',
     '',
-    'Available task commands:',
-    'Task commands:',
-    '  show <task_id>               Show one task and its readiness details',
-    '  new <change-slug>            Scaffold one graph-declared task contract',
-    '  batch <change-slug> --stdin  Scaffold multiple graph-declared task contracts from JSON stdin',
-    '  complete <task_id>           Finish implementation and send the task to review',
-    '  approve <task_id>            Approve an in-review task and mark it done',
-    '  reopen <task_id>             Move a review or done task back into implementation',
-    '  block <task_id> --reason     Pause a task because something external is blocking it',
-    '  request-feedback <task_id>   Pause a task because you need user input',
-    '  fix                          Repair runtime conflicts deterministically',
+    'Inspect:',
+    '  inspect show <task_id>                Show one task and its readiness details',
+    '',
+    'Scaffold:',
+    '  scaffold new <change-slug>            Scaffold one graph-declared task contract',
+    '  scaffold batch <change-slug> --stdin  Scaffold multiple graph-declared task contracts from JSON stdin',
+    '',
+    'Review:',
+    '  review complete <task_id>            Finish implementation and send the task to review',
+    '  review approve <task_id>             Approve an in-review task and mark it done',
+    '  review reopen <task_id>              Move a review or done task back into implementation',
+    '',
+    'Runtime:',
+    '  runtime block <task_id> --reason     Pause a task because something external is blocking it',
+    '  runtime request-feedback <task_id>   Pause a task because you need user input',
+    '',
+    'Repair:',
+    '  repair fix                            Repair runtime conflicts deterministically',
+    '  repair reset <task_id>                Reset runtime state for one task',
     '',
     'For a fast start: superplan run --json',
     'To run a specific task: superplan run <task_id> --json',
     'For tracked authoring: shape changes/<slug>/tasks.md first, validate it, then scaffold task contracts from graph-declared ids.',
     '',
-    'Some recovery commands still exist but are intentionally hidden from the default help surface.',
-    '',
     'Examples:',
-    '  superplan task show T-001 --json',
-    '  superplan task --help',
-    '  superplan task new improve-task-authoring --task-id T-001 --json',
-    '  printf \'{"tasks":[{"task_id":"T-001"},{"task_id":"T-002","priority":"high"}]}\' | superplan task batch improve-task-authoring --stdin --json',
+    '  superplan task inspect show T-001 --json',
+    '  superplan task scaffold new improve-task-authoring --task-id T-001 --json',
+    '  printf \'{"tasks":[{"task_id":"T-001"},{"task_id":"T-002","priority":"high"}]}\' | superplan task scaffold batch improve-task-authoring --stdin --json',
     '  superplan run T-001 --json',
-    '  superplan task approve T-001 --json',
-    '  superplan task block T-001 --reason "Waiting on review" --json',
+    '  superplan task review approve T-001 --json',
+    '  superplan task runtime block T-001 --reason "Waiting on review" --json',
   ].join('\n');
 }
 
 function getInvalidTaskCommandError(options: {
-  subcommand?: string;
+  namespace?: string;
+  action?: string;
   requiresTaskId?: boolean;
   requiredArgumentLabel?: string;
 }): TaskErrorResult {
@@ -438,6 +467,146 @@ function getRemovedTaskCommandError(subcommand: string): TaskErrorResult {
         getTaskCommandHelpMessage({}),
       ].join('\n'),
       retryable: true,
+    },
+  };
+}
+
+function getTaskCommandNextAction(
+  commandKey: string,
+  result: Extract<TaskCommandResult, { ok: true }>,
+): NextAction {
+  if (commandKey === 'scaffold new') {
+    const taskId = typeof result.data.task_id === 'string' ? result.data.task_id : null;
+    return taskId
+      ? commandNextAction(
+        `superplan run ${taskId} --json`,
+        'Single-task scaffolding finished, so the default next move is to activate that task.',
+      )
+      : commandNextAction(
+        'superplan status --json',
+        'Task scaffolding finished; the next control-plane step is checking the frontier.',
+      );
+  }
+
+  if (commandKey === 'scaffold batch') {
+    return commandNextAction(
+      'superplan run --json',
+      'Batch scaffolding finished, so the default next move is to activate the next ready task.',
+    );
+  }
+
+  if (commandKey === 'inspect show') {
+    const task = result.data.task ?? null;
+    if (!task) {
+      return commandNextAction(
+        'superplan status --json',
+        'The task details were shown; the next useful control-plane step is checking the frontier.',
+      );
+    }
+
+    if (task.status === 'in_progress') {
+      return stopNextAction(
+        `Task ${task.task_id} is already active. Continue implementation until it is completed, blocked, or waiting for feedback.`,
+        'The task is already active, so execution is the next step.',
+      );
+    }
+
+    if (task.is_ready) {
+      return commandNextAction(
+        `superplan run ${task.task_id} --json`,
+        'This task is ready, so the next useful command is to start it explicitly.',
+      );
+    }
+
+    if (task.status === 'in_review') {
+      return stopNextAction(
+        `Task ${task.task_id} is in review. Resolve it with \`superplan task review approve ${task.task_id} --json\` or \`superplan task review reopen ${task.task_id} --reason "..." --json\`.`,
+        'The task is in review, so the next step is review resolution rather than execution.',
+      );
+    }
+
+    if (task.status === 'blocked') {
+      return stopNextAction(
+        `Task ${task.task_id} is blocked. Resolve the blocker before resuming tracked work.`,
+        'Blocked tasks should not be resumed blindly.',
+      );
+    }
+
+    if (task.status === 'needs_feedback') {
+      return waitForUserNextAction(
+        `Provide the missing feedback for ${task.task_id}, then resume intentionally.`,
+        'Tasks waiting for feedback should not be resumed blindly.',
+      );
+    }
+
+    if (task.status === 'done') {
+      return commandNextAction(
+        'superplan status --json',
+        'This task is already done, so the next useful control-plane step is choosing other work.',
+      );
+    }
+
+    return stopNextAction(
+      `Task ${task.task_id} is not runnable yet. Resolve its readiness blockers before activating it.`,
+      'The task is not runnable yet.',
+    );
+  }
+
+  if (commandKey === 'review complete') {
+    const taskId = typeof result.data.task_id === 'string' ? result.data.task_id : 'this task';
+    return stopNextAction(
+      `Task ${taskId} is now in review. Resolve it with \`superplan task review approve ${taskId} --json\` or \`superplan task review reopen ${taskId} --reason "..." --json\`.`,
+      'Completion moved the task into review, so the next step is review resolution.',
+    );
+  }
+
+  if (commandKey === 'review approve' || commandKey === 'repair fix' || commandKey === 'repair reset') {
+    return commandNextAction(
+      'superplan status --json',
+      'The command finished a control-plane transition, so the next useful step is checking the frontier.',
+    );
+  }
+
+  if (commandKey === 'review reopen') {
+    const taskId = typeof result.data.task_id === 'string' ? result.data.task_id : 'this task';
+    return stopNextAction(
+      `Task ${taskId} is back in implementation. Continue work until it is completed, blocked, or waiting for feedback.`,
+      'Reopen moved the task back into implementation.',
+    );
+  }
+
+  if (commandKey === 'runtime block') {
+    const taskId = typeof result.data.task_id === 'string' ? result.data.task_id : 'this task';
+    return stopNextAction(
+      `Task ${taskId} is blocked. Resolve the blocker before trying to continue tracked work.`,
+      'Blocked tasks should not trigger more runtime commands until the blocker is addressed.',
+    );
+  }
+
+  if (commandKey === 'runtime request-feedback') {
+    const taskId = typeof result.data.task_id === 'string' ? result.data.task_id : 'this task';
+    return waitForUserNextAction(
+      `Provide the requested feedback for ${taskId}, then resume intentionally.`,
+      'The task is now waiting on user input.',
+    );
+  }
+
+  return commandNextAction(
+    'superplan status --json',
+    'The command finished; check the frontier before choosing another control-plane action.',
+  );
+}
+
+function withTaskNextAction(commandKey: string, result: TaskCommandResult): TaskCommandResult {
+  if (!result.ok) {
+    return result;
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...result.data,
+      next_action: getTaskCommandNextAction(commandKey, result),
     },
   };
 }
@@ -1011,7 +1180,7 @@ export async function selectNextTask(): Promise<TaskSelectionResult> {
   return buildTaskSelectionResult(undefined, null, 'No ready tasks available');
 }
 
-async function fixTasks(command = 'task fix'): Promise<TaskCommandResult> {
+async function fixTasks(command = 'task repair fix'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const parsedTasksResult = await getParsedTasks();
   if (parsedTasksResult.error) {
@@ -1433,7 +1602,7 @@ export async function activateTask(taskId: string, command = 'run'): Promise<Tas
       ok: false,
       error: {
         code: 'TASK_IN_REVIEW',
-        message: 'Task is in review. Use "task reopen <task_id>" to continue implementation.',
+        message: 'Task is in review. Use "task review reopen <task_id>" to continue implementation.',
         retryable: false,
       },
     };
@@ -1444,7 +1613,7 @@ export async function activateTask(taskId: string, command = 'run'): Promise<Tas
       ok: false,
       error: {
         code: 'TASK_ALREADY_COMPLETED',
-        message: 'Task is already completed. Use "task reopen <task_id>" to work on it again.',
+        message: 'Task is already completed. Use "task review reopen <task_id>" to work on it again.',
         retryable: false,
       },
     };
@@ -1470,7 +1639,7 @@ export async function activateTask(taskId: string, command = 'run'): Promise<Tas
   };
 }
 
-async function completeTask(taskId: string, command = 'task complete'): Promise<TaskCommandResult> {
+async function completeTask(taskId: string, command = 'task review complete'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -1550,7 +1719,7 @@ async function completeTask(taskId: string, command = 'task complete'): Promise<
   };
 }
 
-async function approveTask(taskId: string, command = 'task approve'): Promise<TaskCommandResult> {
+async function approveTask(taskId: string, command = 'task review approve'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const parsedTask = await getParsedTask(taskId);
@@ -1608,7 +1777,7 @@ async function approveTask(taskId: string, command = 'task approve'): Promise<Ta
   };
 }
 
-async function blockTask(taskId: string, reason?: string, command = 'task block'): Promise<TaskCommandResult> {
+async function blockTask(taskId: string, reason?: string, command = 'task runtime block'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -1659,7 +1828,7 @@ async function blockTask(taskId: string, reason?: string, command = 'task block'
   };
 }
 
-async function requestFeedbackTask(taskId: string, message?: string, command = 'task request-feedback'): Promise<TaskCommandResult> {
+async function requestFeedbackTask(taskId: string, message?: string, command = 'task runtime request-feedback'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const invariantError = getInvariantError(runtimeState);
@@ -1713,7 +1882,7 @@ async function requestFeedbackTask(taskId: string, message?: string, command = '
   };
 }
 
-async function reopenTask(taskId: string, reason?: string, command = 'task reopen'): Promise<TaskCommandResult> {
+async function reopenTask(taskId: string, reason?: string, command = 'task review reopen'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const parsedTask = await getParsedTask(taskId);
@@ -1801,7 +1970,7 @@ async function reopenTask(taskId: string, reason?: string, command = 'task reope
   };
 }
 
-async function resetTask(taskId: string, command = 'task reset'): Promise<TaskCommandResult> {
+async function resetTask(taskId: string, command = 'task repair reset'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
   const parsedTasksResult = await getParsedTasks();
@@ -1908,7 +2077,7 @@ async function createTask(changeSlug: string, taskId: string | undefined, rawPri
   }), 'utf-8');
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
   await appendOverlayEvent({
-    command: 'task new',
+    command: 'task scaffold new',
     requestedAction: 'ensure',
     visibility: overlayVisibility,
   });
@@ -2064,7 +2233,7 @@ async function createTaskBatchFromPayload(
     : [];
   const overlayVisibility = await refreshOverlayFromMergedTasks({ requestedAction: 'ensure' });
   await appendOverlayEvent({
-    command: 'task batch',
+    command: 'task scaffold batch',
     requestedAction: 'ensure',
     visibility: overlayVisibility,
   });
@@ -2122,8 +2291,9 @@ function getPositionalArgs(args: string[]): string[] {
 
 export async function task(args: string[]): Promise<TaskCommandResult> {
   const positionalArgs = getPositionalArgs(args);
-  const subcommand = positionalArgs[0];
-  const subjectId = positionalArgs[1];
+  const namespace = positionalArgs[0];
+  const action = positionalArgs[1];
+  const subjectId = positionalArgs[2];
   const reason = getOptionValue(args, '--reason');
   const message = getOptionValue(args, '--message');
   const priority = getOptionValue(args, '--priority');
@@ -2131,45 +2301,54 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
   const taskIdOption = getOptionValue(args, '--task-id');
   const useStdin = hasFlag(args, '--stdin');
 
-  if (!subcommand) {
-    return getInvalidTaskCommandError({ subcommand });
+  if (!namespace) {
+    return getInvalidTaskCommandError({ namespace });
   }
 
-  if (Object.prototype.hasOwnProperty.call(REMOVED_TASK_SUBCOMMAND_GUIDANCE, subcommand)) {
-    return getRemovedTaskCommandError(subcommand);
+  if (Object.prototype.hasOwnProperty.call(REMOVED_TASK_SUBCOMMAND_GUIDANCE, namespace)) {
+    return getRemovedTaskCommandError(namespace);
   }
 
-  if (!TASK_SUBCOMMANDS.has(subcommand)) {
-    return getInvalidTaskCommandError({ subcommand });
+  if (!TASK_NAMESPACES.has(namespace)) {
+    return getInvalidTaskCommandError({ namespace, action });
   }
 
-  if (subcommand === 'show') {
+  if (!action || !TASK_NAMESPACE_ACTIONS[namespace]?.has(action)) {
+    return getInvalidTaskCommandError({ namespace, action });
+  }
+
+  const commandKey = `${namespace} ${action}`;
+
+  if (namespace === 'inspect' && action === 'show') {
     if (!subjectId) {
       return getInvalidTaskCommandError({
-        subcommand,
+        namespace,
+        action,
         requiresTaskId: true,
       });
     }
 
-    return showTask(subjectId);
+    return withTaskNextAction(commandKey, await showTask(subjectId));
   }
 
-  if (subcommand === 'new') {
+  if (namespace === 'scaffold' && action === 'new') {
     if (!subjectId) {
       return getInvalidTaskCommandError({
-        subcommand,
+        namespace,
+        action,
         requiresTaskId: true,
         requiredArgumentLabel: '<change-slug>',
       });
     }
 
-    return createTask(subjectId, taskIdOption, priority);
+    return withTaskNextAction(commandKey, await createTask(subjectId, taskIdOption, priority));
   }
 
-  if (subcommand === 'batch') {
+  if (namespace === 'scaffold' && action === 'batch') {
     if (!subjectId) {
       return getInvalidTaskCommandError({
-        subcommand,
+        namespace,
+        action,
         requiresTaskId: true,
         requiredArgumentLabel: '<change-slug>',
       });
@@ -2189,43 +2368,44 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
       );
     }
 
-    return createTaskBatch({
+    return withTaskNextAction(commandKey, await createTaskBatch({
       changeSlug: subjectId,
       batchFilePath: filePath,
       useStdin,
-    });
+    }));
   }
 
-  if (subcommand === 'fix') {
-    return fixTasks('task fix');
+  if (namespace === 'repair' && action === 'fix') {
+    return withTaskNextAction(commandKey, await fixTasks('task repair fix'));
   }
 
   if (!subjectId) {
     return getInvalidTaskCommandError({
-      subcommand,
+      namespace,
+      action,
       requiresTaskId: true,
     });
   }
 
-  if (subcommand === 'approve') {
-    return approveTask(subjectId, 'task approve');
+  if (namespace === 'review' && action === 'approve') {
+    return withTaskNextAction(commandKey, await approveTask(subjectId, 'task review approve'));
   }
 
-  if (subcommand === 'reopen') {
-    return reopenTask(subjectId, reason, 'task reopen');
+  if (namespace === 'review' && action === 'reopen') {
+    return withTaskNextAction(commandKey, await reopenTask(subjectId, reason, 'task review reopen'));
   }
 
-  if (subcommand === 'reset') {
-    return resetTask(subjectId, 'task reset');
+  if (namespace === 'repair' && action === 'reset') {
+    return withTaskNextAction(commandKey, await resetTask(subjectId, 'task repair reset'));
   }
 
-  if (subcommand === 'block') {
-    return blockTask(subjectId, reason, 'task block');
+  if (namespace === 'runtime' && action === 'block') {
+    return withTaskNextAction(commandKey, await blockTask(subjectId, reason, 'task runtime block'));
   }
 
-  if (subcommand === 'request-feedback') {
-    return requestFeedbackTask(subjectId, message, 'task request-feedback');
+  if (namespace === 'runtime' && action === 'request-feedback') {
+    return withTaskNextAction(commandKey, await requestFeedbackTask(subjectId, message, 'task runtime request-feedback'));
   }
 
-  return completeTask(subjectId, 'task complete');
+  return withTaskNextAction(commandKey, await completeTask(subjectId, 'task review complete'));
 }

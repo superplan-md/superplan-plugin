@@ -5,13 +5,12 @@ Use this reference when `superplan-entry` needs to decide whether the repo or ho
 ## Check In Order
 
 1. whether the `superplan` CLI appears available at all
-2. whether machine or agent integration setup appears present
-3. whether the current repo is initialized
-4. whether serious brownfield work is missing durable context
-5. whether the request should stay out even if Superplan is available
+2. whether the current repo is initialized
+3. whether serious brownfield work is missing durable context
+4. whether the request should stay out even if Superplan is available
 
 Do not infer readiness from `.superplan/` alone.
-The March 17 design split CLI install, host setup, and repo init on purpose.
+The March 17 design split CLI install, host setup, and repo init on purpose, but missing repo init should usually be fixed in place rather than handed back to the user.
 
 ## Readiness Layers
 
@@ -27,19 +26,6 @@ Action:
 - point to installing or exposing the `superplan` command
 - do not tell the user to run `superplan setup` until the CLI itself exists
 
-### `setup-missing`
-
-Meaning:
-
-- the CLI may exist, but machine or agent integration setup is missing
-- the user is not yet in the normal Superplan-capable host state
-
-Action:
-
-- guide the user to `superplan setup`
-- stop rather than pretending the workflow is ready
-- prefer the global host integration path unless the user explicitly wants local-only setup
-
 ### `init-missing`
 
 Meaning:
@@ -49,9 +35,9 @@ Meaning:
 
 Action:
 
-- guide the user to `superplan init --json`
-- if setup also appears missing, call that out first
-- if the user started with `init`, explain the shortcut flow: `setup` first, then `init --json`
+- if the `superplan` CLI exists and Superplan engagement is warranted, run `superplan init --scope local --yes --json`
+- continue in the same turn after init succeeds
+- only stop and ask the user to intervene if the init command fails or the CLI itself is missing
 
 ### `context-missing`
 
@@ -68,7 +54,6 @@ Action:
 Meaning:
 
 - the CLI is available
-- setup appears present
 - the repo is initialized
 - no immediate context bootstrap is blocking the next phase
 
@@ -90,8 +75,7 @@ Action:
 
 - ready: route to the owning workflow phase or `superplan-route`
 - context-missing: route to `superplan-context`
-- init-missing: give readiness guidance and stop
-- setup-missing: give readiness guidance and stop
+- init-missing: run repo-local init and continue when the CLI exists
 - cli-missing: give readiness guidance and stop
 - stay-out: answer directly because Superplan would add no value
 
@@ -100,11 +84,11 @@ Action:
 The March 17 product design settled these as distinct concepts:
 
 - `superplan setup`: machine and agent integration setup
-- `superplan init --json`: repo-local initialization
+- `superplan init --scope local --yes --json`: repo-local initialization fast path for agent flows
 - global config: `~/.config/superplan/config.toml`
 - workspace config: `<repo>/.superplan/config.toml`
 
-Global integration is the default path.
+Global integration is still a useful default, but repo-local initialization should not wait on it when the CLI already exists and the current work needs Superplan.
 
 Do not collapse all readiness failures into "repo not ready."
 
@@ -112,16 +96,14 @@ Do not collapse all readiness failures into "repo not ready."
 
 If repo-local work begins before machine setup appears complete:
 
-- call out that `setup` is missing
-- then call out `init` if the repo also needs initialization
-
-The user should understand which layer is missing, even if the product later offers shortcuts.
+- prefer running repo-local init first when the CLI exists
+- continue with the repo-local workflow
+- mention host setup later only if it actually matters for the current work
 
 ## Useful Checks
 
 - `command -v superplan` or equivalent command discovery for CLI availability
 - `superplan doctor --json` when the CLI exists but readiness is unclear
-- `~/.config/superplan/config.toml` for durable host defaults
 - `<repo>/.superplan/config.toml` for repo-local initialization
 
 ## Keep Out Of `decisions.md`
@@ -132,6 +114,5 @@ The user should understand which layer is missing, even if the product later off
 
 ## Good `decisions.md` Entries
 
-- "Machine setup was missing, so Superplan workflow was deferred."
-- "Repo init was missing, so structured workflow was deferred."
+- "Repo init was missing, so `superplan init --scope local --yes --json` was run before continuing."
 - "Brownfield repo lacked durable context; context bootstrap required before shaping."

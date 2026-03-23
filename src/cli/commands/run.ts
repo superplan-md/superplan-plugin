@@ -1,5 +1,6 @@
 import { activateTask, selectNextTask, type ParsedTask } from './task';
 import type { OverlayRuntimeNotice } from '../overlay-visibility';
+import { getQueueNextAction, stopNextAction, type NextAction } from '../next-action';
 
 interface RunDeps {
   selectNextTaskFn: typeof selectNextTask;
@@ -15,6 +16,7 @@ export type RunResult =
         status: 'in_progress' | null;
         task: ParsedTask | null;
         reason: string;
+        next_action: NextAction;
         overlay?: OverlayRuntimeNotice;
       };
     }
@@ -54,6 +56,10 @@ function buildRunResultFromActivation(activationResult: Awaited<ReturnType<typeo
       status: activationResult.data.status,
       task: activationResult.data.task,
       reason: activationResult.data.reason,
+      next_action: stopNextAction(
+        `Task ${activationResult.data.task_id} is active. Continue implementation until it is completed, blocked, or waiting for feedback.`,
+        'The task is active now, so the next step is execution rather than another control-plane command.',
+      ),
       ...('overlay' in activationResult.data && activationResult.data.overlay
         ? { overlay: activationResult.data.overlay }
         : {}),
@@ -108,6 +114,13 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
         status: null,
         task: null,
         reason: nextTaskResult.data.reason,
+        next_action: getQueueNextAction({
+          active: null,
+          ready: [],
+          in_review: [],
+          blocked: [],
+          needs_feedback: [],
+        }),
       },
     };
   }
@@ -126,6 +139,10 @@ export async function run(args: string[] = [], deps: Partial<RunDeps> = {}): Pro
         status: activationResult.data.status,
         task: activationResult.data.task,
         reason: nextTaskResult.data.reason,
+        next_action: stopNextAction(
+          `Task ${activationResult.data.task_id} is active. Continue implementation until it is completed, blocked, or waiting for feedback.`,
+          'The task has been activated, so the next step is execution rather than another control-plane command.',
+        ),
         ...('overlay' in activationResult.data && activationResult.data.overlay
           ? { overlay: activationResult.data.overlay }
           : {}),

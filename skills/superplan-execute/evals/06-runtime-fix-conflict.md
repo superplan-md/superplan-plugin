@@ -7,8 +7,8 @@
 
 ## Expected Behavior
 
-- use deterministic runtime repair such as `superplan task fix`
-- use `task reset` only as an explicit recovery move when warranted
+- use deterministic runtime repair such as `superplan task repair fix`
+- use `task repair reset` only as an explicit recovery move when warranted
 - avoid ad hoc file edits
 
 ## Why

@@ -222,23 +222,13 @@ Likely handoffs:
 - to `superplan-verify` when key proof is missing, weak, or stale but the task is still reviewable
 - back to `superplan-execute` for more work when AC are unmet after honest review
 - task completion through the normal CLI completion transition if accepted:
-  - current CLI: `superplan task complete <task_id>`
-  - future CLI target: `superplan task complete --if-reviewed`
+  - current CLI: `superplan task review complete <task_id> --json`
 - user feedback if human judgment is needed
 - back to `superplan-shape` when the task contract no longer matches the real work
 
 Internal support-skill usage may include:
 
 - `superplan-verify`
-
-## Future CLI Hooks
-
-- `superplan task review`
-- `superplan task complete --if-reviewed`
-- `superplan doctor`
-- `superplan task evidence`
-- `superplan task verify`
-- `superplan task reconcile-review`
 
 ## Validation Cases
 

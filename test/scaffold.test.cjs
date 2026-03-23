@@ -22,19 +22,16 @@ test('change new creates a canonical change skeleton', async () => {
   const payload = parseCliJson(result);
 
   assert.equal(result.code, 0);
-  assert.deepEqual(payload, {
-    ok: true,
-    data: {
-      change_id: 'improve-planning',
-      root: '.superplan/changes/improve-planning',
-      files: [
-        '.superplan/changes/improve-planning/tasks.md',
-        '.superplan/changes/improve-planning/tasks',
-        '.superplan/changes/improve-planning/specs/README.md',
-      ],
-    },
-    error: null,
-  });
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.change_id, 'improve-planning');
+  assert.equal(payload.data.root, '.superplan/changes/improve-planning');
+  assert.deepEqual(payload.data.files, [
+    '.superplan/changes/improve-planning/tasks.md',
+    '.superplan/changes/improve-planning/tasks',
+    '.superplan/changes/improve-planning/specs/README.md',
+  ]);
+  assert.equal(payload.data.next_action.type, 'stop');
+  assert.equal(payload.error, null);
 
   const tasksIndexPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks.md');
   assert.equal(await pathExists(tasksIndexPath), true);
@@ -66,25 +63,22 @@ test('change new from a nested repo directory uses the repo-root superplan works
   const payload = parseCliJson(result);
 
   assert.equal(result.code, 0);
-  assert.deepEqual(payload, {
-    ok: true,
-    data: {
-      change_id: 'improve-planning',
-      root: path.relative(nestedCwd, changeRoot) || changeRoot,
-      files: [
-        path.relative(nestedCwd, path.join(changeRoot, 'tasks.md')) || path.join(changeRoot, 'tasks.md'),
-        path.relative(nestedCwd, path.join(changeRoot, 'tasks')) || path.join(changeRoot, 'tasks'),
-        path.relative(nestedCwd, path.join(changeRoot, 'specs', 'README.md')) || path.join(changeRoot, 'specs', 'README.md'),
-      ],
-    },
-    error: null,
-  });
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.change_id, 'improve-planning');
+  assert.equal(payload.data.root, path.relative(nestedCwd, changeRoot) || changeRoot);
+  assert.deepEqual(payload.data.files, [
+    path.relative(nestedCwd, path.join(changeRoot, 'tasks.md')) || path.join(changeRoot, 'tasks.md'),
+    path.relative(nestedCwd, path.join(changeRoot, 'tasks')) || path.join(changeRoot, 'tasks'),
+    path.relative(nestedCwd, path.join(changeRoot, 'specs', 'README.md')) || path.join(changeRoot, 'specs', 'README.md'),
+  ]);
+  assert.equal(payload.data.next_action.type, 'stop');
+  assert.equal(payload.error, null);
   assert.equal(await pathExists(path.join(changeRoot, 'tasks.md')), true);
   assert.equal(await pathExists(path.join(changeRoot, 'specs', 'README.md')), true);
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
-test('task new scaffolds a contract for a graph-declared task id without mutating tasks.md', async () => {
+test('task scaffold new scaffolds a contract for a graph-declared task id without mutating tasks.md', async () => {
   const sandbox = await makeSandbox('superplan-task-new-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -109,6 +103,7 @@ test('task new scaffolds a contract for a graph-declared task id without mutatin
 
   const firstTaskPayload = parseCliJson(await runCli([
     'task',
+    'scaffold',
     'new',
     'improve-planning',
     '--task-id',
@@ -121,39 +116,38 @@ test('task new scaffolds a contract for a graph-declared task id without mutatin
     env: sandbox.env,
   }));
 
-  assert.deepEqual(firstTaskPayload, {
-    ok: true,
-    data: {
-      task_id: 'T-001',
-      change_id: 'improve-planning',
-      path: '.superplan/changes/improve-planning/tasks/T-001.md',
-      task: {
-        task_id: 'T-001',
-        status: 'pending',
-        priority: 'high',
-        depends_on_all: [],
-        depends_on_any: [],
-        description: 'Add scaffolding command',
-        acceptance_criteria: [
-          {
-            text: 'Define the first acceptance criterion.',
-            done: false,
-          },
-        ],
-        total_acceptance_criteria: 1,
-        completed_acceptance_criteria: 0,
-        progress_percent: 0,
-        effective_status: 'draft',
-        is_valid: true,
-        is_ready: true,
-        issues: [],
+  assert.equal(firstTaskPayload.ok, true);
+  assert.equal(firstTaskPayload.data.task_id, 'T-001');
+  assert.equal(firstTaskPayload.data.change_id, 'improve-planning');
+  assert.equal(firstTaskPayload.data.path, '.superplan/changes/improve-planning/tasks/T-001.md');
+  assert.deepEqual(firstTaskPayload.data.task, {
+    task_id: 'T-001',
+    status: 'pending',
+    priority: 'high',
+    depends_on_all: [],
+    depends_on_any: [],
+    description: 'Add scaffolding command',
+    acceptance_criteria: [
+      {
+        text: 'Define the first acceptance criterion.',
+        done: false,
       },
-    },
-    error: null,
+    ],
+    total_acceptance_criteria: 1,
+    completed_acceptance_criteria: 0,
+    progress_percent: 0,
+    effective_status: 'draft',
+    is_valid: true,
+    is_ready: true,
+    issues: [],
   });
+  assert.equal(firstTaskPayload.data.next_action.type, 'command');
+  assert.equal(firstTaskPayload.data.next_action.command, 'superplan run T-001 --json');
+  assert.equal(firstTaskPayload.error, null);
 
   const secondTaskPayload = parseCliJson(await runCli([
     'task',
+    'scaffold',
     'new',
     'improve-planning',
     '--task-id',
@@ -183,6 +177,7 @@ test('task new scaffolds a contract for a graph-declared task id without mutatin
 
   const thirdTaskPayload = parseCliJson(await runCli([
     'task',
+    'scaffold',
     'new',
     'release-polish',
     '--task-id',
@@ -193,36 +188,34 @@ test('task new scaffolds a contract for a graph-declared task id without mutatin
     env: sandbox.env,
   }));
 
-  assert.deepEqual(thirdTaskPayload, {
-    ok: true,
-    data: {
-      task_id: 'T-003',
-      change_id: 'release-polish',
-      path: '.superplan/changes/release-polish/tasks/T-003.md',
-      task: {
-        task_id: 'T-003',
-        status: 'pending',
-        priority: 'medium',
-        depends_on_all: [],
-        depends_on_any: [],
-        description: 'Add release notes',
-        acceptance_criteria: [
-          {
-            text: 'Define the first acceptance criterion.',
-            done: false,
-          },
-        ],
-        total_acceptance_criteria: 1,
-        completed_acceptance_criteria: 0,
-        progress_percent: 0,
-        effective_status: 'draft',
-        is_valid: true,
-        is_ready: true,
-        issues: [],
+  assert.equal(thirdTaskPayload.ok, true);
+  assert.equal(thirdTaskPayload.data.task_id, 'T-003');
+  assert.equal(thirdTaskPayload.data.change_id, 'release-polish');
+  assert.equal(thirdTaskPayload.data.path, '.superplan/changes/release-polish/tasks/T-003.md');
+  assert.deepEqual(thirdTaskPayload.data.task, {
+    task_id: 'T-003',
+    status: 'pending',
+    priority: 'medium',
+    depends_on_all: [],
+    depends_on_any: [],
+    description: 'Add release notes',
+    acceptance_criteria: [
+      {
+        text: 'Define the first acceptance criterion.',
+        done: false,
       },
-    },
-    error: null,
+    ],
+    total_acceptance_criteria: 1,
+    completed_acceptance_criteria: 0,
+    progress_percent: 0,
+    effective_status: 'draft',
+    is_valid: true,
+    is_ready: true,
+    issues: [],
   });
+  assert.equal(thirdTaskPayload.data.next_action.type, 'command');
+  assert.equal(thirdTaskPayload.data.next_action.command, 'superplan run T-003 --json');
+  assert.equal(thirdTaskPayload.error, null);
 
   const firstTaskPath = path.join(sandbox.cwd, '.superplan', 'changes', 'improve-planning', 'tasks', 'T-001.md');
   const firstTaskContent = await fs.readFile(firstTaskPath, 'utf-8');
@@ -245,7 +238,7 @@ test('task new scaffolds a contract for a graph-declared task id without mutatin
   assert.equal(diagnosticCodes.has('DUPLICATE_TASK_ID'), false);
 });
 
-test('task batch scaffolds graph-declared task ids and parse derives dependencies from tasks.md', async () => {
+test('task scaffold batch scaffolds graph-declared task ids and parse derives dependencies from tasks.md', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -291,6 +284,7 @@ test('task batch scaffolds graph-declared task ids and parse derives dependencie
 
   const batchPayload = parseCliJson(await runCli([
     'task',
+    'scaffold',
     'batch',
     'improve-planning',
     '--stdin',
@@ -352,7 +346,7 @@ test('task batch scaffolds graph-declared task ids and parse derives dependencie
   assert.deepEqual(parsedBatchTask.depends_on_all, ['T-001']);
 });
 
-test('task batch fails before writing when a task id is not declared in the graph', async () => {
+test('task scaffold batch fails before writing when a task id is not declared in the graph', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-invalid-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -373,6 +367,7 @@ test('task batch fails before writing when a task id is not declared in the grap
 
   const result = await runCli([
     'task',
+    'scaffold',
     'batch',
     'improve-planning',
     '--stdin',
@@ -402,7 +397,7 @@ test('task batch fails before writing when a task id is not declared in the grap
   assert.match(tasksIndexContent, /- `T-001` Add scaffolding command/);
 });
 
-test('task batch using stdin fails clearly when the payload is empty', async () => {
+test('task scaffold batch using stdin fails clearly when the payload is empty', async () => {
   const sandbox = await makeSandbox('superplan-task-batch-empty-');
   await fs.mkdir(path.join(sandbox.cwd, '.superplan', 'changes'), { recursive: true });
 
@@ -413,6 +408,7 @@ test('task batch using stdin fails clearly when the payload is empty', async () 
 
   const result = await runCli([
     'task',
+    'scaffold',
     'batch',
     'improve-planning',
     '--stdin',

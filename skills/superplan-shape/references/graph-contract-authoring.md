@@ -17,7 +17,7 @@ Only the `stay_out` path should avoid creating graph truth.
 
 Manual creation of individual `tasks/T-xxx.md` files is off limits.
 
-Once the graph structure is ready, mint executable task contracts with `superplan task new` for one task or `superplan task batch` for multiple tasks instead of hand-creating new `tasks/T-xxx.md` files just to allocate task IDs.
+Once the graph structure is ready, mint executable task contracts with `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks instead of hand-creating new `tasks/T-xxx.md` files just to allocate task IDs.
 
 ## Root Graph Shape
 

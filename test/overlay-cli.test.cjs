@@ -246,7 +246,7 @@ Enable overlay
   assert.equal(ensurePayload.data.enabled, true);
 });
 
-test('task new auto-launches the overlay companion when overlay is enabled', async () => {
+test('task scaffold new auto-launches the overlay companion when overlay is enabled', async () => {
   const sandbox = await makeSandbox('superplan-overlay-task-new-');
   const overlayOutputPath = path.join(sandbox.root, 'overlay-task-new.txt');
   const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
@@ -272,6 +272,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
 
   const createPayload = parseCliJson(await runCli([
     'task',
+    'scaffold',
     'new',
     'shape-spec',
     '--task-id',
@@ -305,7 +306,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
   assert.equal(snapshot.board.backlog[0].title, 'Break down the main spec graph');
 });
 
-test('task batch auto-launches the overlay companion when overlay is enabled', async () => {
+test('task scaffold batch auto-launches the overlay companion when overlay is enabled', async () => {
   const sandbox = await makeSandbox('superplan-overlay-task-batch-');
   const overlayOutputPath = path.join(sandbox.root, 'overlay-task-batch.txt');
   const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
@@ -332,6 +333,7 @@ printf '%s\n' "$SUPERPLAN_OVERLAY_WORKSPACE" >> "$SUPERPLAN_OVERLAY_TEST_OUTPUT"
 
   const createPayload = parseCliJson(await runCli([
     'task',
+    'scaffold',
     'batch',
     'shape-spec',
     '--stdin',
@@ -756,7 +758,7 @@ Terminate overlay companion on hide
   await waitForProcessExit(pid);
 });
 
-test('task request-feedback relaunches the companion after hide and restores overlay runtime state', async (t) => {
+test('task runtime request-feedback relaunches the companion after hide and restores overlay runtime state', async (t) => {
   const sandbox = await makeSandbox('superplan-overlay-feedback-relaunch-');
   const fakeOverlayPath = path.join(sandbox.root, 'fake-overlay');
   const pidLogPath = path.join(sandbox.root, 'overlay-pids.txt');
@@ -849,6 +851,7 @@ Relaunch overlay when feedback is requested
 
   const feedbackPayload = parseCliJson(await runCli([
     'task',
+    'runtime',
     'request-feedback',
     'T-011E',
     '--message',
@@ -1156,7 +1159,7 @@ Pickup overlay task
   assert.equal(startPayload.data.overlay.companion.reason, 'not_installed');
 
   parseCliJson(await runCli(['overlay', 'hide', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
-  parseCliJson(await runCli(['task', 'block', 'T-250', '--reason', 'Need to pause', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
+  parseCliJson(await runCli(['task', 'runtime', 'block', 'T-250', '--reason', 'Need to pause', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
   const resumePayload = parseCliJson(await runCli(['run', 'T-250', '--json'], { cwd: sandbox.cwd, env: sandbox.env }));
 
   const resumedControl = await readJson(path.join(sandbox.cwd, '.superplan', 'runtime', 'overlay-control.json'));
@@ -1289,7 +1292,7 @@ Needs review
 `);
 
   parseCliJson(await runCli(['run', 'T-200', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
-  parseCliJson(await runCli(['task', 'request-feedback', 'T-200', '--message', 'Please review', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
+  parseCliJson(await runCli(['task', 'runtime', 'request-feedback', 'T-200', '--message', 'Please review', '--json'], { cwd: feedbackSandbox.cwd, env: feedbackSandbox.env }));
 
   const feedbackSnapshot = await readJson(path.join(feedbackSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));
   assert.equal(feedbackSnapshot.active_task, null);
@@ -1338,10 +1341,10 @@ Finish me
     },
   });
 
-  const reviewPayload = parseCliJson(await runCli(['task', 'complete', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
+  const reviewPayload = parseCliJson(await runCli(['task', 'review', 'complete', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
   assert.equal(reviewPayload.data.status, 'in_review');
 
-  const approvePayload = parseCliJson(await runCli(['task', 'approve', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
+  const approvePayload = parseCliJson(await runCli(['task', 'review', 'approve', 'T-300', '--json'], { cwd: doneSandbox.cwd, env: doneSandbox.env }));
   assert.equal(approvePayload.data.status, 'done');
 
   const doneSnapshot = await readJson(path.join(doneSandbox.cwd, '.superplan', 'runtime', 'overlay.json'));

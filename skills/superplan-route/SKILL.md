@@ -203,13 +203,6 @@ Likely handoffs:
 
 For large ambiguous `program` work, the handoff should make clear that downstream shaping is expected to capture clarification, spec, or plan truth before the final task graph is scaffolded.
 
-## Future CLI Hooks
-
-- `superplan route --json`
-- `superplan route --explain`
-- `superplan route --dry-run`
-- `superplan doctor --engagement`
-
 ## Validation Cases
 
 Should route to stay out:

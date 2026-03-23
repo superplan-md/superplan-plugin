@@ -18,13 +18,13 @@ That remains the product direction.
 
 Today, the executable surface is:
 
-- `superplan init --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
+- `superplan init --scope local --yes --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, and `.superplan/changes/`
 - `superplan change new <change-slug> --json` scaffolds a tracked change root
 - `superplan validate <change-slug> --json` validates `tasks.md`, graph diagnostics, and graph/task-contract consistency
-- `superplan task new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
-- `superplan task batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
+- `superplan task scaffold batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
 - `superplan parse [path] --json` parses task contract markdown files and overlays dependency truth from the validated graph
-- `superplan status --json`, `superplan run --json`, `superplan task show <task_id> --json`, and `superplan task complete --json` operate on parsed task files plus runtime state
+- `superplan status --json`, `superplan run --json`, `superplan task inspect show <task_id> --json`, and `superplan task review complete --json` operate on parsed task files plus runtime state
 - `superplan doctor --json` checks installation and setup, not shaped work
 
 So shape work like this:
@@ -32,30 +32,30 @@ So shape work like this:
 - author `tasks.md` as the canonical graph whenever tracked work exists
 - manual creation of individual `tasks/T-xxx.md` files is off limits
 - once the graph in `tasks.md` is ready, run `superplan validate <slug> --json`
-- use `superplan task new` for one task or `superplan task batch` for multiple tasks to mint the `T-xxx.md` task contracts by explicit `task_id`
+- use `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks to mint the `T-xxx.md` task contracts by explicit `task_id`
 - keep task contracts in `.superplan/changes/<slug>/tasks/T-xxx.md`
 - use `superplan parse` for contract parsing and `superplan validate` for graph plus cross-artifact checks
-- inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task show <task_id> --json` as needed
+- inspect readiness with `superplan status --json`, `superplan run --json`, and `superplan task inspect show <task_id> --json` as needed
 - do not split dependency ownership back into task-file frontmatter
 
 ## Current Authoring Workflow
 
-1. Run `superplan init --json` if the repo is not initialized.
+1. Run `superplan init --scope local --yes --json` if the repo is not initialized.
 2. Run `superplan change new <slug> --json` to create `.superplan/changes/<slug>/` and `.superplan/changes/<slug>/tasks/`.
 3. Create or refine `.superplan/changes/<slug>/tasks.md` as graph truth with explicit task ids and dependency edges.
 4. Run `superplan validate <slug> --json`.
-5. Use `superplan task new <slug> --task-id <task_id> --json` when exactly one graph-declared task contract is ready.
-6. Use `superplan task batch <slug> --stdin --json` when two or more graph-declared task contracts are ready and can be scaffolded together.
-7. Use the returned payload from `task new` or `task batch` directly instead of immediately calling `task show`.
+5. Use `superplan task scaffold new <slug> --task-id <task_id> --json` when exactly one graph-declared task contract is ready.
+6. Use `superplan task scaffold batch <slug> --stdin --json` when two or more graph-declared task contracts are ready and can be scaffolded together.
+7. Use the returned payload from `task scaffold new` or `task scaffold batch` directly instead of immediately calling `task inspect show`.
 8. Run `superplan validate <slug> --json` again after scaffolding.
-9. Use `superplan status --json` to confirm the ready frontier and `superplan task show <task_id> --json` when one task needs deeper inspection.
+9. Use `superplan status --json` to confirm the ready frontier and `superplan task inspect show <task_id> --json` when one task needs deeper inspection.
 10. Hand off to execution with the exact validation commands already named.
 
 For agent-first flows, prefer stdin over temporary files. `--file <path>` remains available only as a fallback when the batch spec itself should persist.
 
 ## Batch Spec Shape
 
-`superplan task batch` accepts either:
+`superplan task scaffold batch` accepts either:
 
 - a top-level array of task objects
 - an object with a top-level `tasks` array
@@ -91,7 +91,7 @@ Example:
 Agent-first example:
 
 ```bash
-printf '%s' '[{"task_id":"T-001","priority":"high"},{"task_id":"T-002"}]' | superplan task batch improve-planning --stdin --json
+printf '%s' '[{"task_id":"T-001","priority":"high"},{"task_id":"T-002"}]' | superplan task scaffold batch improve-planning --stdin --json
 ```
 
 ## Task Contract Shape The Current CLI Parses
@@ -213,12 +213,12 @@ Keep these distinctions explicit in the skill.
 Use:
 
 - `superplan validate <change-slug> --json` for graph and cross-artifact validation
-- `superplan task new <change-slug> --task-id <task_id> --json` for one task contract
-- `superplan task batch <change-slug> --stdin --json` for two or more task contracts
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json` for one task contract
+- `superplan task scaffold batch <change-slug> --stdin --json` for two or more task contracts
 - `superplan doctor --json` for install/setup readiness
 - `superplan parse --json` for task contract validity
 - `superplan status --json` for the current ready-frontier summary
-- `superplan task show <task_id> --json` for one task plus computed readiness reasons
+- `superplan task inspect show <task_id> --json` for one task plus computed readiness reasons
 
 Do not use:
 

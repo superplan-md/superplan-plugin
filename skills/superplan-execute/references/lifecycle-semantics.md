@@ -13,7 +13,7 @@ Meaning:
 
 Do not treat this as a blind status flip.
 
-## `task block`
+## `task runtime block`
 
 Meaning:
 
@@ -28,7 +28,7 @@ Use when:
 - a real blocker prevents continuation
 - the task should pause without pretending the broader goal changed
 
-## `task request-feedback`
+## `task runtime request-feedback`
 
 Meaning:
 
@@ -53,7 +53,7 @@ Current note:
 - this is a workflow output and handoff state
 - the current CLI does not persist it as a dedicated runtime state yet
 
-## `task complete`
+## `task review complete`
 
 Meaning:
 
@@ -92,8 +92,8 @@ Do not invent idempotency by mutating runtime files manually.
 
 Prefer:
 
-- `superplan task fix` for deterministic runtime cleanup
-- `superplan task reset <task_id>` for explicit recovery when state must be cleared
+- `superplan task repair fix` for deterministic runtime cleanup
+- `superplan task repair reset <task_id>` for explicit recovery when state must be cleared
 
 Avoid:
 

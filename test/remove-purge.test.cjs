@@ -244,16 +244,13 @@ test('remove supports explicit non-interactive local cleanup for agents', async 
   const payload = parseCliJson(result);
 
   assert.equal(result.code, 0);
-  assert.deepEqual(payload, {
-    ok: true,
-    data: {
-      scope: 'local',
-      mode: 'remove',
-      removed_paths: payload.data.removed_paths,
-      agents: payload.data.agents,
-    },
-    error: null,
-  });
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.scope, 'local');
+  assert.equal(payload.data.mode, 'remove');
+  assert.equal(Array.isArray(payload.data.removed_paths), true);
+  assert.equal(Array.isArray(payload.data.agents), true);
+  assert.equal(payload.data.next_action.type, 'stop');
+  assert.equal(payload.error, null);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.superplan')), false);
   assert.equal(await pathExists(path.join(sandbox.cwd, '.claude', 'skills', 'superplan-entry')), false);
 });
@@ -271,4 +268,5 @@ test('remove rejects non-interactive agent mode without explicit scope and confi
   assert.equal(payload.error.code, 'INVALID_REMOVE_COMMAND');
   assert.match(payload.error.message, /Remove requires --scope in non-interactive mode/);
   assert.match(payload.error.message, /superplan remove --scope <local\|global\|skip> --yes --json/);
+  assert.equal(payload.error.next_action.type, 'stop');
 });

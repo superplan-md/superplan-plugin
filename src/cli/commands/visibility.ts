@@ -7,12 +7,14 @@ import {
   type VisibilityRunReport,
   type VisibilityTaskSnapshot,
 } from '../visibility-runtime';
+import { commandNextAction, type NextAction } from '../next-action';
 
 export type VisibilityResult =
   | {
       ok: true;
       data: {
         report: VisibilityRunReport;
+        next_action: NextAction;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -120,6 +122,10 @@ async function reportVisibility(args: string[]): Promise<VisibilityResult> {
     ok: true,
     data: {
       report,
+      next_action: commandNextAction(
+        'superplan status --json',
+        'The visibility report is diagnostic output; the next operational step is checking the live frontier.',
+      ),
     },
   };
 }

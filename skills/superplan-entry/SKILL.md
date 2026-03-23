@@ -1,6 +1,6 @@
 ---
 name: superplan-entry
-description: Use when starting any repo-work conversation in a Superplan-enabled host or repo, before clarifying questions or implementation, to decide whether to stay conversational or enter structured Superplan workflow.
+description: Use when starting any repo-work conversation, before clarifying questions or implementation, to decide whether Superplan should stay out or engage and to take the fastest valid readiness step when engagement is needed.
 ---
 
 # Using Superplan
@@ -15,7 +15,7 @@ This skill replaces the entry discipline that `using-superpowers` used to provid
 Keep it small.
 Its job is to decide whether Superplan should meaningfully participate, whether readiness is missing, and which workflow phase owns the next responsibility.
 
-If there is a meaningful chance that the request is repo work needing durable structure, use this skill before implementation, broad repo exploration, or clarifying questions.
+If there is a meaningful chance that the request is repo work, use this skill before implementation, broad repo exploration, or clarifying questions.
 
 ## Subagent Guard
 
@@ -51,7 +51,7 @@ Rationalizations that mean stop and use this skill:
 - "The user asked for code, not process."
 - "The skill description is broad, so I can skip it."
 
-When Superplan is active, entry discipline outranks generic default behavior unless the user or repo explicitly says otherwise.
+When repo work is in play, entry discipline outranks generic default behavior unless the user or repo explicitly says otherwise.
 
 ## Workspace Precedence
 
@@ -79,7 +79,7 @@ Entry routing is not permission to explore the CLI surface.
 
 - once the current intent is known, use the canonical command path already named in this skill
 - do not call `--help`, neighboring subcommands, or diagnostic commands just to orient yourself when the correct command is already listed
-- use `superplan task show <task_id> --json` only when one task's detailed readiness is actually needed
+- use `superplan task inspect show <task_id> --json` only when one task's detailed readiness is actually needed
 - use `superplan doctor --json` only for setup or install uncertainty, not normal routing
 - once the needed CLI state is known, stop polling and route or act
 
@@ -93,7 +93,7 @@ Use when:
 - the system must decide whether Superplan adds value before deeper workflow work begins
 - the request may refer to already shaped work that should resume or be reviewed rather than routed from scratch
 
-In practice, this is the default entry layer in Superplan mode.
+In practice, this is the default entry layer for repo work in this host.
 
 For dense requirement dumps, packed queries, JTBD lists, or multi-constraint briefs, assume this skill applies unless there is a strong reason to stay out.
 
@@ -136,11 +136,13 @@ Assumptions:
 - inspect repo-native workflows, scripts, harnesses, and custom skills before suggesting generic Superplan helpers
 - inspect whether work is already shaped and should resume in a later phase
 - decide whether to stay out or continue
+- run the minimum readiness command needed to make engagement possible
 - route to `superplan-route`
 - route to `superplan-context` when missing context is the real blocker
 - route to `superplan-execute` when tracked work is already shaped and should move forward
 - route to `superplan-review` when the real request is completion authority
-- give brief readiness guidance when setup or initialization is missing
+- run repo-local init automatically when the CLI exists and Superplan engagement is warranted
+- give brief readiness guidance only when the CLI itself is missing or a required readiness command fails
 
 ## Current CLI Loop
 
@@ -152,29 +154,29 @@ Common commands:
 - `superplan context status --json` to inspect missing durable workspace context entrypoints
 - `superplan change new <change-slug> --json` to create one tracked change root
 - `superplan validate <change-slug> --json` to validate `tasks.md` graph structure and task-contract consistency
-- `superplan task new <change-slug> --task-id <task_id> --json` to scaffold exactly one graph-declared task contract
-- `superplan task batch <change-slug> --stdin --json` to create two or more new task contracts in one pass
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json` to scaffold exactly one graph-declared task contract
+- `superplan task scaffold batch <change-slug> --stdin --json` to create two or more new task contracts in one pass
 - `superplan status --json` to see active, ready, blocked, and needs-feedback tasks
 - `superplan run --json` to claim the next ready task or continue the active task, with the chosen task contract and selection reason in the payload
 - `superplan run <task_id> --json` to explicitly start or resume one known task
-- `superplan task show <task_id> --json` to inspect one task and its readiness reasons directly
-- `superplan task block <task_id> --reason "<reason>" --json` when execution cannot safely continue
-- `superplan task request-feedback <task_id> --message "<message>" --json` when the user must respond
-- `superplan task complete <task_id> --json` after the work and acceptance criteria are satisfied
-- `superplan task fix --json` when runtime state becomes inconsistent
+- `superplan task inspect show <task_id> --json` to inspect one task and its readiness reasons directly
+- `superplan task runtime block <task_id> --reason "<reason>" --json` when execution cannot safely continue
+- `superplan task runtime request-feedback <task_id> --message "<message>" --json` when the user must respond
+- `superplan task review complete <task_id> --json` after the work and acceptance criteria are satisfied
+- `superplan task repair fix --json` when runtime state becomes inconsistent
 - `superplan doctor --json` to verify setup, overlay launchability, and workspace health when readiness is unclear
 - `superplan overlay ensure --json` to explicitly reveal or resync the overlay when overlay support is enabled
 - `superplan overlay hide --json` to close the overlay when the workspace is idle or empty
-- when shaping tracked work, author `.superplan/changes/<slug>/tasks.md` first, validate it, then use `superplan task new` or `superplan task batch` by graph-declared `task_id` instead of hand-creating `tasks/T-xxx.md`
+- when shaping tracked work, author `.superplan/changes/<slug>/tasks.md` first, validate it, then use `superplan task scaffold new` or `superplan task scaffold batch` by graph-declared `task_id` instead of hand-creating `tasks/T-xxx.md`
 
 Execution default:
 
 1. check `superplan status --json`
 2. claim work with `superplan run --json`
-3. use the task returned by `superplan run --json`; use `superplan run <task_id> --json` when one specific task should become active; only call `superplan task show <task_id> --json` when you need one task's full details and readiness reasons
+3. use the task returned by `superplan run --json`; use `superplan run <task_id> --json` when one specific task should become active; only call `superplan task inspect show <task_id> --json` when you need one task's full details and readiness reasons
 4. execute through the workflow spine, especially `superplan-execute`, instead of ad hoc task mutation
 5. block, request feedback, or complete through the runtime commands rather than editing markdown state by hand
-6. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
+6. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task scaffold new`, `superplan task scaffold batch`, `superplan run`, `superplan run <task_id>`, and `superplan task review reopen` to auto-reveal the overlay when work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle again
 7. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
 
 Authoring default:
@@ -182,14 +184,14 @@ Authoring default:
 1. create the tracked change once with `superplan change new <change-slug> --json`
 2. manual creation of individual `tasks/T-xxx.md` files is off limits; agents should shape the graph and dependencies first, validate them, then use the CLI to mint task contracts
 3. author the root `.superplan/changes/<change-slug>/tasks.md` manually as graph truth; the shell-loop prohibition applies to task-contract generation and bulk graph rewrites, not to normal manual graph authoring
-4. do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to mass-write task contracts or bulk-rewrite graph artifacts; shell is only acceptable as stdin transport into `superplan task batch --stdin --json`
+4. do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to mass-write task contracts or bulk-rewrite graph artifacts; shell is only acceptable as stdin transport into `superplan task scaffold batch --stdin --json`
 5. when the request is large, ambiguous, or multi-workstream, do not jump straight from the raw request into task scaffolding; route through clarification, spec, or plan work first, then finalize the graph
 6. author `.superplan/changes/<change-slug>/tasks.md` manually as graph truth, then run `superplan validate <change-slug> --json`
-7. use `superplan task new <change-slug> --task-id <task_id> --json` only when exactly one graph-declared task should be scaffolded now
-8. use `superplan task batch <change-slug> --stdin --json` when two or more graph-declared tasks are clear enough to scaffold in one pass
+7. use `superplan task scaffold new <change-slug> --task-id <task_id> --json` only when exactly one graph-declared task should be scaffolded now
+8. use `superplan task scaffold batch <change-slug> --stdin --json` when two or more graph-declared tasks are clear enough to scaffold in one pass
 9. when multiple tasks are ready together, prefer one batch call so the graph edges and batch-local dependencies are captured in one authoring step
 10. prefer stdin over temporary files for batch task authoring in agent flows
-11. use the returned task payloads directly after authoring instead of immediately calling `superplan task show`
+11. use the returned task payloads directly after authoring instead of immediately calling `superplan task inspect show`
 
 Canonical command rule:
 
@@ -200,6 +202,12 @@ Canonical command rule:
 - do not replace canonical task authoring with shell loops or direct file rewrites
 - prefer commands that already return the needed task payload instead of making extra follow-up calls
 
+Initialization rule:
+
+- do not call `superplan change new`, `superplan task scaffold new`, `superplan task scaffold batch`, or any other scaffolding command until `superplan-entry` has decided Superplan should engage
+- if Superplan should engage and repo init is missing while the CLI exists, run `superplan init --scope local --yes --json` immediately instead of stopping to tell the user to do it
+- once repo init succeeds, continue to the owning workflow phase in the same turn
+
 ## Entry Decision Order
 
 Apply this order:
@@ -208,7 +216,7 @@ Apply this order:
 2. honor the subagent guard and skip top-level routing inside bounded task subagents
 3. stay out if Superplan adds no durable structure, visibility, or reusable context
 4. inspect the repo's existing workflows and prefer them over new Superplan-specific helpers
-5. check readiness layers: CLI availability, setup, init, and context
+5. check readiness layers: CLI availability, init, and context
 6. if the request targets already shaped work, resume the owning workflow phase directly
 7. if the request is new or the structure decision is still open, route to `superplan-route`
 
@@ -217,7 +225,9 @@ Do not bounce already shaped work back through `superplan-route` just because th
 Completion rule:
 
 - if Superplan stays out, answer directly and stop
-- if readiness is missing, give the concrete missing-layer guidance and stop
+- if the CLI is missing, give the concrete missing-layer guidance and stop
+- if repo init is missing but the CLI exists and Superplan should engage, run repo-local init and continue
+- if a readiness command fails, surface the failure concretely and stop
 - if the owning phase is already known, hand off directly in the same turn
 - if the request is dense, packed, or structurally ambiguous, do not stop at "this should route"; continue until the owning next phase is explicit
 - if `superplan-route` is invoked and returns `direct`, `task`, `slice`, or `program`, the work is not done until the next workflow owner is explicit, normally `superplan-shape`
@@ -281,14 +291,13 @@ See `references/routing-boundaries.md`.
 - forcing engagement when Superplan adds no value
 - turning every request into tracked work
 - using entry routing as cover for CLI command-surface exploration once the next workflow owner is already clear
-- calling `--help`, neighboring subcommands, or repeated `status`/`task show`/`doctor` checks without a concrete routing need
+- calling `--help`, neighboring subcommands, or repeated `status`/`task inspect show`/`doctor` checks without a concrete routing need
 
 ## Readiness Rules
 
 - If the `superplan` CLI itself appears missing, give brief installation or availability guidance and stop.
-- If the CLI exists but host or agent integration appears missing, guide `superplan setup` and stop.
-- If the repo is not initialized, give readiness guidance for `superplan init --json` and stop.
-- If the user starts from `superplan init --json` but setup is missing too, call out the shortcut order clearly: `superplan setup`, then `superplan init --json`.
+- If the repo is not initialized and Superplan should engage, run `superplan init --scope local --yes --json` and continue.
+- If host or agent integration appears missing but the CLI exists, do not let that block repo-local engagement by itself.
 - If the repo is initialized but serious brownfield context is missing or stale, route to `superplan-context`.
 - If the request targets existing tracked work, resume the owning later phase instead of forcing a fresh routing pass.
 - If the request is repo work but the structure decision is still open, route to `superplan-route`.
@@ -311,10 +320,9 @@ See `references/gotchas.md` and `references/memory-and-measurement.md`.
 One of:
 
 - direct answer with Superplan staying out
-- readiness guidance with the concrete missing layer called out
+- repo-local init performed, then handoff to the owning next phase
+- readiness guidance with the concrete missing layer called out when the CLI is missing or a readiness command fails
 - installation or availability guidance for the `superplan` CLI
-- `superplan setup` guidance
-- `superplan init --json` guidance
 - route to `superplan-context`
 - route to `superplan-route`
 - route to `superplan-execute`
@@ -337,16 +345,15 @@ Likely handoffs:
 ## CLI Hooks
 
 - `superplan doctor --json`
-- `superplan setup`
-- `superplan init --json`
+- `superplan init --scope local --yes --json`
 - `superplan change new <change-slug> --json`
 - `superplan validate <change-slug> --json`
-- `superplan task new <change-slug> --task-id <task_id> --json`
-- `superplan task batch <change-slug> --stdin --json`
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json`
+- `superplan task scaffold batch <change-slug> --stdin --json`
 - `superplan status --json`
 - `superplan run --json`
 - `superplan parse --json`
-- `superplan task show <task_id> --json`
+- `superplan task inspect show <task_id> --json`
 - `superplan overlay ensure --json`
 - `superplan overlay hide --json`
 

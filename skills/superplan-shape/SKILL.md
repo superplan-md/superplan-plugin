@@ -98,16 +98,16 @@ Product target:
 
 Current CLI reality:
 
-- `superplan init --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, `.superplan/changes/`, `.superplan/decisions.md`, `.superplan/gotchas.md`, and `.superplan/plan.md`
+- `superplan init --scope local --yes --json` creates `.superplan/`, `.superplan/context/`, `.superplan/runtime/`, `.superplan/changes/`, `.superplan/decisions.md`, `.superplan/gotchas.md`, and `.superplan/plan.md`
 - `superplan context bootstrap --json` creates missing durable workspace context entrypoints
 - `superplan context status --json` reports missing durable workspace context entrypoints
 - `superplan change new <change-slug> --json` scaffolds a tracked change root plus spec surfaces
 - `superplan validate <change-slug> --json` validates `tasks.md`, graph diagnostics, and graph/task-contract consistency
-- `superplan task new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
-- `superplan task batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json` scaffolds one graph-declared task contract without mutating `tasks.md`
+- `superplan task scaffold batch <change-slug> --stdin --json` scaffolds multiple graph-declared task contracts from JSON stdin without mutating `tasks.md`
 - `superplan parse [path] --json` parses task contract files and overlays dependency truth from the graph
 - `superplan status --json` summarizes the ready frontier from task files plus runtime state
-- `superplan task show <task_id> --json` explains one task's current readiness in detail
+- `superplan task inspect show <task_id> --json` explains one task's current readiness in detail
 - `superplan doctor --json` checks setup, overlay, and workspace-shape health
 
 Therefore:
@@ -115,7 +115,7 @@ Therefore:
 - for tracked work, author root `tasks.md` according to the hard contract and validate it before scaffolding contracts
 - when Superplan is staying out, do not create graph artifacts
 - manual creation of individual `tasks/T-xxx.md` task contracts is off limits
-- once the root graph is ready, use `superplan task new` or `superplan task batch` by explicit `task_id` instead of hand-creating new `tasks/T-xxx.md` files
+- once the root graph is ready, use `superplan task scaffold new` or `superplan task scaffold batch` by explicit `task_id` instead of hand-creating new `tasks/T-xxx.md` files
 - keep dependency truth in `tasks.md` and task-contract truth in the task files
 - choose current CLI validation commands explicitly during shaping
 - distinguish current CLI commands from future CLI hooks
@@ -128,11 +128,11 @@ Manual creation of individual `tasks/T-xxx.md` files is off limits.
 
 Agents should spend their shaping effort on the graph and dependency structure in `tasks.md`, then mint canonical task contracts through the CLI.
 
-Authoring the root `tasks.md` manually is expected. Do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to mass-write task contracts or bulk-rewrite graph artifacts. Shell is only acceptable here as stdin transport into `superplan task batch --stdin --json`.
+Authoring the root `tasks.md` manually is expected. Do not use shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs to mass-write task contracts or bulk-rewrite graph artifacts. Shell is only acceptable here as stdin transport into `superplan task scaffold batch --stdin --json`.
 
-When shaping produces exactly one new task contract, `superplan task new <change-slug> --task-id <task_id> --json` is the default scaffold path.
+When shaping produces exactly one new task contract, `superplan task scaffold new <change-slug> --task-id <task_id> --json` is the default scaffold path.
 
-When shaping produces two or more new task contracts that are clear enough to author now, use one `superplan task batch <change-slug> --stdin --json` call over repeated `superplan task new` calls.
+When shaping produces two or more new task contracts that are clear enough to author now, use one `superplan task scaffold batch <change-slug> --stdin --json` call over repeated `superplan task scaffold new` calls.
 
 For agent-first flows, prefer stdin over temporary files. Use `--file <path>` only when the batch spec itself must persist as a repo artifact.
 
@@ -184,7 +184,7 @@ For tiny tracked work, keep the graph minimal:
 
 - one root `tasks.md`
 - one task entry
-- one `superplan task new` task contract shell
+- one `superplan task scaffold new` task contract shell
 - no explicit workstream grouping unless grouping materially helps
 
 For large tracked work, shape the graph according to the hard contract:
@@ -203,8 +203,8 @@ Do not author "graph-like" markdown that ignores the contract shape.
 Shaping is not permission to explore the CLI surface.
 
 - use the current CLI contract already listed in this skill instead of probing adjacent commands
-- do not call `--help` or overlapping authoring or diagnostic commands when `change new`, `task new`, `task batch`, `parse`, `status`, `task show`, or `doctor` already cover the need
-- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task show <task_id> --json` for one task detail, and `superplan doctor --json` when install, workspace artifact, or task-state health is in doubt
+- do not call `--help` or overlapping authoring or diagnostic commands when `change new`, `task scaffold new`, `task scaffold batch`, `parse`, `status`, `task inspect show`, or `doctor` already cover the need
+- use `superplan parse` for task validity, `superplan status --json` for frontier checks, `superplan task inspect show <task_id> --json` for one task detail, and `superplan doctor --json` when install, workspace artifact, or task-state health is in doubt
 - once the needed authoring or validation command is known, run it instead of exploring alternatives
 
 ## User Communication
@@ -229,10 +229,10 @@ Treat the workspace's existing setup as the default operating surface.
 - create one lightweight task for `direct`
 - create one normal task for `task`
 - create `plan.md` plus tasks for `slice` when sequencing matters
-- use `superplan task batch --stdin --json` when two or more task contracts are ready to be scaffolded together
+- use `superplan task scaffold batch --stdin --json` when two or more task contracts are ready to be scaffolded together
 - create specs when misunderstanding the target is a bigger risk than sequencing
 - create `changes/<slug>/tasks.md` as canonical graph truth for tracked work
-- use `superplan task new` for one task or `superplan task batch` for multiple tasks after graph structure is ready
+- use `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks after graph structure is ready
 - create a richer graph, plan, spec, and task set for `program` when the work genuinely needs all layers
 - classify sub-work as `parallel-safe`, `serial`, or `wait-for-clarity`
 - create investigation or uncertainty-reduction tasks
@@ -249,7 +249,7 @@ Treat the workspace's existing setup as the default operating surface.
   - `superplan doctor --json` for install/setup readiness
   - `superplan parse [path] --json` for task contract validity
   - `superplan status --json` for current ready-frontier inspection
-  - `superplan task show <task_id> --json` for one task's detailed readiness
+  - `superplan task inspect show <task_id> --json` for one task's detailed readiness
 - choose an autonomy class:
   - `autopilot`
   - `checkpointed autopilot`
@@ -267,9 +267,9 @@ Treat the workspace's existing setup as the default operating surface.
 - turning specs into pseudocode by default
 - performing broad execution here
 - creating tracked work without a root `changes/<slug>/tasks.md`
-- hand-creating new `tasks/T-xxx.md` task contracts when `superplan task new` can mint the canonical ID and scaffold
-- manually creating individual task files instead of using `superplan task batch --stdin --json` when multiple tasks are ready together
-- using shell loops or direct file-edit rewrites to create or mutate task contracts instead of the CLI authoring commands; piping JSON into `superplan task batch --stdin --json` is fine, writing the task files yourself is not
+- hand-creating new `tasks/T-xxx.md` task contracts when `superplan task scaffold new` can mint the canonical ID and scaffold
+- manually creating individual task files instead of using `superplan task scaffold batch --stdin --json` when multiple tasks are ready together
+- using shell loops or direct file-edit rewrites to create or mutate task contracts instead of the CLI authoring commands; piping JSON into `superplan task scaffold batch --stdin --json` is fine, writing the task files yourself is not
 - authoring root graphs or shard files without the hard-contract section shape
 - jumping straight from a dense, ambiguous requirement dump into task scaffolding when clarification, spec, or plan work should happen first
 - inventing unstable IDs or renumbering existing task IDs
@@ -286,7 +286,7 @@ Treat the workspace's existing setup as the default operating surface.
 - hiding real CLI contract gaps behind generic statements like "capture this in the task graph" when no current graph parser exists
 - pretending uncertain work is already cleanly decomposed
 - using shaping as an excuse for CLI command-surface exploration after the artifact and frontier decisions are already clear
-- calling `--help`, `doctor`, `status`, or `task show` without a concrete shaping reason
+- calling `--help`, `doctor`, `status`, or `task inspect show` without a concrete shaping reason
 - pushing all ambiguity downstream into execution
 - replacing a working repo-native workflow with a Superplan-specific one by default
 
@@ -374,15 +374,15 @@ For large graphs, execution handoff should also name the ownership boundary betw
 
 Current CLI:
 
-- `superplan init --json`
+- `superplan init --scope local --yes --json`
 - `superplan change new <change-slug> --json`
 - `superplan validate <change-slug> --json`
-- `superplan task new <change-slug> --task-id <task_id> --json`
-- `superplan task batch <change-slug> --stdin --json`
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json`
+- `superplan task scaffold batch <change-slug> --stdin --json`
 - `superplan doctor --json`
 - `superplan parse [path] --json`
 - `superplan status --json`
-- `superplan task show <task_id> --json`
+- `superplan task inspect show <task_id> --json`
 
 Future CLI hooks:
 
@@ -414,7 +414,7 @@ Should create plan plus tasks:
 Should use batch task authoring:
 
 - when two or more new task contracts are already clear enough to scaffold now
-- when repeated `task new` calls would only add agent churn rather than clarity
+- when repeated `task scaffold new` calls would only add agent churn rather than clarity
 - when batch-local dependencies can be declared up front in one authoring pass
 
 Should create specs as well:
@@ -432,8 +432,8 @@ Should create investigation or decision-gate tasks:
 Should align honestly to the current CLI:
 
 - `tasks.md` should be authored as graph truth and validated with `superplan validate`
-- ready-frontier checks should name `superplan status --json` and `superplan task show <task_id> --json`
-- shaping should use `superplan task new <change-slug> --task-id <task_id> --json` for one task and `superplan task batch --stdin --json` for two or more tasks
+- ready-frontier checks should name `superplan status --json` and `superplan task inspect show <task_id> --json`
+- shaping should use `superplan task scaffold new <change-slug> --task-id <task_id> --json` for one task and `superplan task scaffold batch --stdin --json` for two or more tasks
 - shaping should still follow the hard contract even when runtime semantics lag behind structural validation
 
 Should use root graph plus shards:

@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { ensureWorkspaceArtifacts, getWorkspaceArtifactPaths } from '../workspace-artifacts';
+import { commandNextAction, type NextAction } from '../next-action';
 
 export type ContextResult =
   | {
@@ -11,6 +12,7 @@ export type ContextResult =
         root: string;
         created?: string[];
         missing?: string[];
+        next_action: NextAction;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -85,6 +87,10 @@ export async function context(args: string[] = []): Promise<ContextResult> {
         action: 'bootstrap',
         root: toRelative(cwd, superplanRoot),
         created: createdPaths.map(createdPath => toRelative(cwd, createdPath)),
+        next_action: commandNextAction(
+          'superplan change new <change-slug> --json',
+          'Durable workspace context now exists, so the next control-plane step is creating tracked work.',
+        ),
       },
     };
   }
@@ -104,6 +110,15 @@ export async function context(args: string[] = []): Promise<ContextResult> {
       action: 'status',
       root: toRelative(cwd, artifactPaths.superplanRoot),
       missing,
+      next_action: missing.length > 0
+        ? commandNextAction(
+          'superplan context bootstrap --json',
+          'Context entrypoints are missing, so bootstrap them before relying on Superplan memory.',
+        )
+        : commandNextAction(
+          'superplan status --json',
+          'Context entrypoints are already present, so continue with the runtime loop.',
+        ),
     },
   };
 }

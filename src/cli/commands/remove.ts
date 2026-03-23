@@ -5,6 +5,7 @@ import { confirm, select } from '@inquirer/prompts';
 import { AgentInstallKind } from '../agent-integrations';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
 import { ALL_SUPERPLAN_SKILL_NAMES } from '../skill-names';
+import { stopNextAction, type NextAction } from '../next-action';
 
 interface AgentEnvironment {
   name: string;
@@ -21,6 +22,8 @@ const MANAGED_ANTIGRAVITY_BLOCK_START = '<!-- superplan-antigravity:start -->';
 const MANAGED_ANTIGRAVITY_BLOCK_END = '<!-- superplan-antigravity:end -->';
 const MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START = '<!-- superplan-entry-instructions:start -->';
 const MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END = '<!-- superplan-entry-instructions:end -->';
+const MANAGED_AMAZONQ_MEMORY_BANK_START = '<!-- superplan-amazonq-memory-bank:start -->';
+const MANAGED_AMAZONQ_MEMORY_BANK_END = '<!-- superplan-amazonq-memory-bank:end -->';
 
 export interface RemoveOptions {
   json?: boolean;
@@ -43,6 +46,7 @@ export type RemoveResult =
         mode: 'remove';
         removed_paths: string[];
         agents: AgentEnvironment[];
+        next_action: NextAction;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -146,6 +150,13 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
         cleanup_paths: [path.join(baseDir, '.opencode', 'commands', 'superplan.md')],
       },
       {
+        name: 'amazonq',
+        path: path.join(baseDir, '.amazonq'),
+        install_path: path.join(baseDir, '.amazonq', 'rules'),
+        install_kind: 'amazonq_rules',
+        cleanup_paths: [path.join(baseDir, '.amazonq', 'rules', 'superplan')],
+      },
+      {
         name: 'antigravity',
         path: path.join(baseDir, '.agents'),
         install_path: path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
@@ -213,6 +224,16 @@ function getManagedInstallPaths(agent: AgentEnvironment, managedSkillNames: stri
   if (agent.install_kind === 'skills_namespace') {
     return [
       ...managedSkillNames.map(skillName => path.join(agent.install_path, skillName)),
+      ...(agent.cleanup_paths ?? []),
+    ];
+  }
+
+  if (agent.install_kind === 'amazonq_rules') {
+    return [
+      ...managedSkillNames.map(skillName => path.join(agent.install_path, `${skillName}.md`)),
+      path.join(agent.install_path, 'memory-bank', 'product.md'),
+      path.join(agent.install_path, 'memory-bank', 'guidelines.md'),
+      path.join(agent.install_path, 'memory-bank', 'tech.md'),
       ...(agent.cleanup_paths ?? []),
     ];
   }
@@ -288,6 +309,13 @@ function stripManagedEntryInstructionsBlock(content: string): string {
     .trimEnd();
 }
 
+function stripManagedAmazonQMemoryBankBlock(content: string): string {
+  return content
+    .replace(new RegExp(`\\n?${MANAGED_AMAZONQ_MEMORY_BANK_START}[\\s\\S]*?${MANAGED_AMAZONQ_MEMORY_BANK_END}\\n?`, 'm'), '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd();
+}
+
 async function removeManagedGlobalRule(targetPath: string, removedPaths: string[]): Promise<void> {
   if (!await pathExists(targetPath)) {
     return;
@@ -328,6 +356,26 @@ async function removeManagedInstructionsFile(targetPath: string, removedPaths: s
   removedPaths.push(targetPath);
 }
 
+async function removeManagedAmazonQMemoryBankFile(targetPath: string, removedPaths: string[]): Promise<void> {
+  if (!await pathExists(targetPath)) {
+    return;
+  }
+
+  const existingContent = await fs.readFile(targetPath, 'utf-8');
+  const nextContent = stripManagedAmazonQMemoryBankBlock(existingContent);
+  if (nextContent === existingContent) {
+    return;
+  }
+
+  if (!nextContent.trim()) {
+    await fs.rm(targetPath, { force: true });
+  } else {
+    await fs.writeFile(targetPath, `${nextContent}\n`, 'utf-8');
+  }
+
+  removedPaths.push(targetPath);
+}
+
 async function removeAgentInstalls(
   agents: AgentEnvironment[],
   managedSkillNames: string[],
@@ -336,6 +384,19 @@ async function removeAgentInstalls(
   for (const agent of agents) {
     if (agent.install_kind === 'managed_global_rule') {
       await removeManagedGlobalRule(agent.install_path, removedPaths);
+      continue;
+    }
+
+    if (agent.install_kind === 'amazonq_rules') {
+      for (const managedSkillName of managedSkillNames) {
+        await removePath(path.join(agent.install_path, `${managedSkillName}.md`), removedPaths);
+      }
+      for (const fileName of ['product.md', 'guidelines.md', 'tech.md']) {
+        await removeManagedAmazonQMemoryBankFile(path.join(agent.install_path, 'memory-bank', fileName), removedPaths);
+      }
+      for (const cleanupPath of agent.cleanup_paths ?? []) {
+        await removePath(cleanupPath, removedPaths);
+      }
       continue;
     }
 
@@ -470,6 +531,10 @@ async function removeCommand(
           mode: 'remove',
           removed_paths: [],
           agents: [],
+          next_action: stopNextAction(
+            'Removal was skipped; no further Superplan action is required from this command.',
+            'The command was explicitly told to skip removal.',
+          ),
         },
       };
     }
@@ -542,6 +607,10 @@ async function removeCommand(
         mode: 'remove',
         removed_paths: removedPaths,
         agents: [...globalAgents, ...localAgents],
+        next_action: stopNextAction(
+          'Reinstall Superplan with `superplan init` only if you want to use it again in this environment.',
+          'Superplan state has been removed, so there is no follow-up workflow command to run now.',
+        ),
       },
     };
   } catch (error: any) {

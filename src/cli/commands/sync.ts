@@ -2,6 +2,7 @@ import { parse } from './parse';
 import { status } from './status';
 import { loadTasks, task } from './task';
 import { refreshOverlaySnapshot } from '../overlay-runtime';
+import { getQueueNextAction, type NextAction } from '../next-action';
 
 interface SyncDiagnostic {
   code: string;
@@ -35,6 +36,7 @@ export type SyncResult =
         in_review: string[];
         blocked: string[];
         needs_feedback: string[];
+        next_action: NextAction;
       };
     }
   | { ok: false; error: { code: string; message: string; retryable: boolean } };
@@ -53,7 +55,7 @@ export async function sync(deps: Partial<SyncDeps> = {}): Promise<SyncResult> {
     return parseResult;
   }
 
-  const fixResult = await runtimeDeps.taskFn(['fix']);
+  const fixResult = await runtimeDeps.taskFn(['repair', 'fix']);
   if (!fixResult.ok) {
     return fixResult;
   }
@@ -106,6 +108,13 @@ export async function sync(deps: Partial<SyncDeps> = {}): Promise<SyncResult> {
       in_review: statusResult.data.in_review,
       blocked: statusResult.data.blocked,
       needs_feedback: statusResult.data.needs_feedback,
+      next_action: getQueueNextAction({
+        active: statusResult.data.active,
+        ready: statusResult.data.ready,
+        in_review: statusResult.data.in_review,
+        blocked: statusResult.data.blocked,
+        needs_feedback: statusResult.data.needs_feedback,
+      }),
     },
   };
 }
