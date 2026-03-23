@@ -5,6 +5,8 @@ import {
   AgentEnvironment,
   getSkillsFileCandidates,
   getSkillsNamespaceCandidates,
+  getAntigravityWorkflowCandidates,
+  getBootstrapStrengthSummary,
 } from '../agent-integrations';
 import { parse } from './parse';
 import { inspectOverlayCompanionInstall } from '../overlay-companion';
@@ -137,9 +139,9 @@ function getProjectAgents(baseDir: string): (AgentEnvironment & { skillsPaths: s
     {
       name: 'antigravity',
       path: path.join(baseDir, '.agents'),
-      skillsPaths: [path.join(baseDir, '.agents', 'rules', 'superplan-entry.md')],
-      install_path: path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
-      install_kind: 'markdown_rule',
+      skillsPaths: getAntigravityWorkflowCandidates(baseDir, '.agents', 'workflows'),
+      install_path: path.join(baseDir, '.agents', 'workflows'),
+      install_kind: 'antigravity_workflows',
       bootstrap_strength: 'rule_bootstrap',
     },
   ];

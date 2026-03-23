@@ -282,6 +282,33 @@ export async function installAntigravityGlobalRule(targetPath: string, skillPath
   await fs.writeFile(targetPath, nextContent, 'utf-8');
 }
 
+export async function installAntigravityWorkflows(skillsDir: string, targetDir: string): Promise<void> {
+  await fs.mkdir(targetDir, { recursive: true });
+  const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+
+    const skillPath = path.join(skillsDir, entry.name, 'SKILL.md');
+    if (!await pathExists(skillPath)) {
+      continue;
+    }
+
+    const skillContent = await fs.readFile(skillPath, 'utf-8');
+    const targetPath = path.join(targetDir, `${entry.name}.md`);
+
+    // Ensure Antigravity workflows have required frontmatter
+    if (!skillContent.startsWith('---')) {
+      const frontmatter = `---\nname: ${entry.name}\ndescription: Superplan ${entry.name} workflow\n---\n\n`;
+      await fs.writeFile(targetPath, frontmatter + skillContent, 'utf-8');
+    } else {
+      await fs.writeFile(targetPath, skillContent, 'utf-8');
+    }
+  }
+}
+
 export async function installAmazonQRules(skillsDir: string, targetDir: string): Promise<void> {
   await fs.mkdir(targetDir, { recursive: true });
   const entries = await fs.readdir(skillsDir, { withFileTypes: true });
@@ -362,9 +389,11 @@ export async function installAgentSkills(skillsDir: string, agents: ExtendedAgen
       continue;
     }
 
-    if (agent.install_kind === 'markdown_rule') {
-      const antigravitySkillPath = path.join(skillsDir, CURRENT_ENTRY_SKILL_NAME, 'SKILL.md');
-      await installAntigravityWorkspaceRule(agent.install_path, antigravitySkillPath);
+    if (agent.install_kind === 'antigravity_workflows') {
+      await installAntigravityWorkflows(skillsDir, agent.install_path);
+      for (const cleanupPath of agent.cleanup_paths ?? []) {
+        await fs.rm(cleanupPath, { recursive: true, force: true });
+      }
       continue;
     }
 
@@ -437,9 +466,10 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'antigravity',
         path: path.join(baseDir, '.agents'),
-        install_path: path.join(baseDir, '.agents', 'rules', 'superplan-entry.md'),
-        install_kind: 'markdown_rule',
+        install_path: path.join(baseDir, '.agents', 'workflows'),
+        install_kind: 'antigravity_workflows',
         bootstrap_strength: 'rule_bootstrap',
+        cleanup_paths: [path.join(baseDir, '.agents', 'rules', 'superplan-entry.md')],
       },
     ];
   }

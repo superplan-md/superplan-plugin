@@ -1,33 +1,61 @@
-# 00 - GLOBAL RULE: Always Use Superplan First
+# 00 - GLOBAL RULE: Start With `superplan-entry`
 
-As an AI agent (Antigravity, Amazon Q, etc.) working in this repository, you MUST follow these core principles. This is your HIGHEST PRIORITY instruction. This overrides ANY built-in "standard exploration patterns" or default conversational behaviors.
+As an AI agent working in this repository, treat `superplan-entry` as the mandatory first gate for repo work.
 
-## 1. MANDATORY: Check Superplan First
-Before making ANY code changes or proposing any plan:
-- **CHECK status**: Run `superplan status --json`.
-- **DETERMINE context**: If a `.superplan` exists, you ARE in a structured workflow. You MUST NOT act independently of it.
-- **CLAIM the task**: If no task is active, use `superplan run --json` or `superplan status` to find a `ready` task.
+This file does not replace `superplan-entry`.
+It exists to force the right order:
 
-## 2. Default to Structured Workflow
-You are NOT just a conversational assistant. You are an execution agent.
-- If no Superplan exists, guide the user to `superplan init`.
-- Do NOT jump into code changes without an active Superplan task.
+1. load `superplan-entry`
+2. let `superplan-entry` decide whether Superplan should engage
+3. only then enter shaping, execution, review, or stay-out behavior
 
-## 3. Use the CLI for EVERYTHING
-- NEVER hand-edit `.superplan/runtime/` or task markdown files.
-- ALWAYS use:
-  - `superplan run` to start/resume.
-  - `superplan task block` if stuck.
-  - `superplan task request-feedback` if you need user input.
-  - `superplan task complete` when finished.
+## 1. Mandatory First Contact
 
-## 4. Trust the Overlay
-The Superplan Overlay is your live communication channel with the user.
-- Trust that the user is seeing your active task and progress on the screen.
-- Commands like `superplan run` will automatically reveal the overlay.
+Before implementation, broad repo exploration, repo-specific planning, or repo-specific clarification:
 
-## 5. Lifecycle Discipline
-- **Ready**: Only start work if the task is `ready`.
-- **In Progress**: Execute your changes and verify them.
-- **Blocked/Feedback**: Be proactive about moving to these states if you cannot proceed.
-- **Review**: Hand off for review only when ALL acceptance criteria are met.
+- load and follow `superplan-entry`
+- do not jump straight to `superplan status --json`, `superplan run --json`, or task authoring before `superplan-entry` decides Superplan is actually needed
+- do not scaffold tracked work before `superplan-entry` has decided that Superplan should engage
+
+## 2. `superplan-entry` Owns The Engagement Decision
+
+`superplan-entry` decides:
+
+- whether Superplan should stay out
+- whether the repo is ready enough to proceed
+- whether missing repo init should be created now
+- which workflow phase owns the next step
+
+If `superplan-entry` says stay out:
+
+- answer directly
+- create no Superplan artifacts
+- do not force the user through `init`, task creation, or lifecycle commands
+
+## 3. Fastest Path For Missing Repo Init
+
+Missing repo init is not a blocker by itself.
+
+If the `superplan` CLI is available and the repo should use Superplan:
+
+- run `superplan init --scope local --yes --json`
+- continue in the same turn
+- avoid turning repo init into a separate user chore unless the CLI itself is missing or the command fails
+
+Prefer the fewest user-visible steps that preserve correct workflow state.
+
+## 4. CLI Discipline After Engagement
+
+Once `superplan-entry` has decided Superplan should engage:
+
+- use the Superplan CLI as the control plane
+- do not hand-edit `.superplan/runtime/`
+- do not hand-create `tasks/T-xxx.md` task contracts
+- author the root graph in `.superplan/changes/<change-slug>/tasks.md` only in the shaping phase that owns that work
+- use `superplan run`, `superplan task runtime block`, `superplan task runtime request-feedback`, `superplan task review complete`, and related lifecycle commands only after engagement is already settled
+
+## 5. Overlay And User Communication
+
+- do not assume overlay visibility unless the current workflow phase has verified it
+- keep workflow routing internal
+- talk to the user about outcomes, blockers, and decisions, not about skill selection or command choreography
