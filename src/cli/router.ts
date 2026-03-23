@@ -1,5 +1,6 @@
 import { setup } from "./commands/setup";
 import { change } from "./commands/change";
+import { context } from "./commands/context";
 import { doctor } from "./commands/doctor";
 import { parse } from "./commands/parse";
 import { init } from "./commands/init";
@@ -10,6 +11,7 @@ import { sync } from "./commands/sync";
 import { status } from "./commands/status";
 import { overlay } from "./commands/overlay";
 import { update } from "./commands/update";
+import { validate } from "./commands/validate";
 import { visibility } from "./commands/visibility";
 
 type CommandOptions = {
@@ -64,11 +66,13 @@ function normalizeCliResult(result: CommandResult) {
 
 export const router: Record<string, CommandHandler> = {
   change: async (args) => change(args),
+  context: async (args) => context(args),
   init: async (_args, options) => init(options),
   setup: async (_args, options) => setup(options),
   remove: async (args, options) => removeCli(args, options),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
+  validate: async (args) => validate(args),
   run: async (args) => run(args),
   sync: async () => sync(),
   status: async () => status(),

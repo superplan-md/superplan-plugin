@@ -33,6 +33,11 @@ test('update reruns the bundled installer with recorded install metadata', async
     const calls = [];
 
     const result = await update({ json: true, quiet: true }, {
+      resolveLatestRelease: async () => ({
+        tag: 'release',
+        commitish: 'release',
+        url: 'https://github.com/example/custom-superplan/releases/tag/release',
+      }),
       runInstaller: async (command, args, options) => {
         calls.push({ command, args, env: options.env });
         return {
@@ -59,9 +64,12 @@ test('update reruns the bundled installer with recorded install metadata', async
         install_method: 'remote_repo',
         repo_url: 'https://github.com/example/custom-superplan.git',
         ref: 'release',
+        commitish: 'release',
+        release_url: 'https://github.com/example/custom-superplan/releases/tag/release',
         install_prefix: path.join(sandbox.root, 'prefix'),
         skills_refreshed: false,
         skills_scope: 'skip',
+        stopped_processes: 0,
       },
     });
 
@@ -74,6 +82,128 @@ test('update reruns the bundled installer with recorded install metadata', async
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, path.join(sandbox.root, 'overlay-bin'));
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_INSTALL_DIR, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
     assert.equal(calls[0].env.SUPERPLAN_RUN_SETUP_AFTER_INSTALL, '0');
+  });
+});
+
+test('update resolves and installs the latest published release before refreshing skills', async () => {
+  const sandbox = await makeSandbox('superplan-update-latest-release-');
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+    const calls = [];
+    const stoppedProcesses = [];
+
+    const result = await update({ json: true, quiet: true }, {
+      readInstallMetadata: async () => ({
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+        ref: 'alpha.12',
+        install_prefix: path.join(sandbox.root, 'prefix'),
+        overlay: {
+          install_method: 'downloaded_prebuilt',
+          release_base_url: 'https://github.com/example/custom-superplan/releases/download/alpha.12',
+          install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
+          install_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'Superplan Overlay Desktop.app'),
+          executable_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'Superplan Overlay Desktop.app', 'Contents', 'MacOS', 'Superplan Overlay Desktop'),
+        },
+      }),
+      resolveLatestRelease: async () => ({
+        tag: 'alpha.14',
+        commitish: 'bea27a2c63f941a99fa6b8afa55348054130fb6f',
+        url: 'https://github.com/example/custom-superplan/releases/tag/alpha.14',
+      }),
+      stopManagedProcesses: async (input) => {
+        stoppedProcesses.push(input);
+        return {
+          stopped: [
+            { pid: 101, kind: 'cli', command: '/prefix/bin/superplan run --json' },
+            { pid: 202, kind: 'overlay', command: '/overlay/Superplan Overlay Desktop' },
+          ],
+        };
+      },
+      runInstaller: async (command, args, options) => {
+        calls.push({ command, args, env: options.env });
+        return {
+          code: 0,
+          stdout: 'Installed Superplan',
+          stderr: '',
+        };
+      },
+      refreshSkills: async () => ({
+        ok: true,
+        data: {
+          scope: 'both',
+          refreshed: true,
+          agents: [],
+          verified: true,
+        },
+      }),
+    });
+
+    assert.deepEqual(result, {
+      ok: true,
+      data: {
+        updated: true,
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+        ref: 'alpha.14',
+        commitish: 'bea27a2c63f941a99fa6b8afa55348054130fb6f',
+        release_url: 'https://github.com/example/custom-superplan/releases/tag/alpha.14',
+        install_prefix: path.join(sandbox.root, 'prefix'),
+        skills_refreshed: true,
+        skills_scope: 'both',
+        stopped_processes: 2,
+      },
+    });
+
+    assert.equal(stoppedProcesses.length, 1);
+    assert.equal(stoppedProcesses[0].installBinDir, path.join(sandbox.root, 'prefix', 'bin'));
+    assert.equal(stoppedProcesses[0].overlayExecutablePath, path.join(
+      sandbox.home,
+      '.local',
+      'share',
+      'superplan',
+      'overlay',
+      'Superplan Overlay Desktop.app',
+      'Contents',
+      'MacOS',
+      'Superplan Overlay Desktop',
+    ));
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].env.SUPERPLAN_REF, 'alpha.14');
+    assert.equal(calls[0].env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL, 'https://github.com/example/custom-superplan/releases/download/alpha.14');
+    assert.equal(calls[0].env.SUPERPLAN_LATEST_COMMITISH, 'bea27a2c63f941a99fa6b8afa55348054130fb6f');
+  });
+});
+
+test('update fails cleanly when latest release resolution fails', async () => {
+  const sandbox = await makeSandbox('superplan-update-latest-release-fails-');
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+
+    const result = await update({ json: true, quiet: true }, {
+      readInstallMetadata: async () => ({
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+      }),
+      resolveLatestRelease: async () => {
+        throw new Error('GitHub latest release lookup failed');
+      },
+      runInstaller: async () => {
+        throw new Error('installer should not run');
+      },
+    });
+
+    assert.deepEqual(result, {
+      ok: false,
+      error: {
+        code: 'LATEST_RELEASE_LOOKUP_FAILED',
+        message: 'GitHub latest release lookup failed',
+        retryable: true,
+      },
+    });
   });
 });
 
@@ -103,6 +233,11 @@ test('update refreshes installed skills for existing global and local setups', a
     const { update } = loadDistModule('cli/commands/update.js');
 
     const result = await update({ json: true, quiet: true }, {
+      resolveLatestRelease: async () => ({
+        tag: 'release',
+        commitish: 'release',
+        url: 'https://github.com/example/custom-superplan/releases/tag/release',
+      }),
       runInstaller: async () => ({
         code: 0,
         stdout: 'Installed Superplan',
@@ -117,9 +252,12 @@ test('update refreshes installed skills for existing global and local setups', a
         install_method: 'remote_repo',
         repo_url: 'https://github.com/example/custom-superplan.git',
         ref: 'release',
+        commitish: 'release',
+        release_url: 'https://github.com/example/custom-superplan/releases/tag/release',
         install_prefix: path.join(sandbox.root, 'prefix'),
         skills_refreshed: true,
         skills_scope: 'both',
+        stopped_processes: 0,
       },
     });
 

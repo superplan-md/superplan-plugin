@@ -102,6 +102,7 @@ Therefore:
 - use CLI transitions instead of hand-editing execution state
 - use `status --json` and `run --json` to inspect the frontier; use `task show <task_id> --json` only when one specific task needs deeper inspection
 - keep approval decisions explicit through `complete`, `approve`, and `reopen`
+- do not end an execution turn after successful implementation proof while the task lifecycle still says `pending` or `in_progress`; either move it through `complete` and the appropriate review state or explicitly report the blocker that prevented that transition
 
 ## CLI Discipline
 
@@ -112,6 +113,14 @@ Execution is not permission to wander across CLI commands.
 - use `superplan task show <task_id> --json` only when one task's detailed readiness or reasons are actually needed
 - use `superplan doctor --json` only for setup or install issues, not normal execution
 - once you know the next command, edit, or blocker transition, stop probing the CLI and act
+
+## User Communication
+
+Execution updates should report progress, not orchestration meta.
+
+- do not narrate scheduler behavior, subagent dispatch, runtime transitions, or command history unless that detail changes a user-facing decision
+- avoid status lines that are mostly internal process commentary
+- tell the user what changed in the code or project state, what verification is running, what risk is being checked, or what blocker now needs their input
 
 ## Lifecycle Semantics And Recovery
 
@@ -127,6 +136,7 @@ Strictness rules:
 - impossible transitions should fail hard
 - invalid or stale task contracts should block safe forward motion
 - do not recover by hand-editing runtime files or markdown execution state
+- passing tests or successful verification do not count as enough closure by themselves; runtime truth must be updated before claiming the task is effectively finished
 
 Recovery rules:
 
@@ -245,6 +255,12 @@ Use the runtime-aware CLI as the scheduler:
 7. `superplan task fix --json` if runtime state becomes inconsistent
 8. if overlay support is enabled for the workspace and a launchable companion is installed, expect `superplan task new`, `superplan task batch`, `superplan run`, `superplan run <task_id>`, and `superplan task reopen` to auto-reveal the overlay as work becomes visible; on a fresh machine or after install/update, verify overlay health with `superplan doctor --json` and `superplan overlay ensure --json` before assuming it is working, and inspect launchability or companion errors if the reveal fails; use `superplan overlay hide --json` when the workspace becomes idle or empty
 9. after overlay-triggering commands, inspect the returned overlay payload; if `overlay.companion.launched` is false, surface `overlay.companion.reason` instead of assuming the overlay appeared
+
+Close-out rule:
+
+- when verification passes and no blocker remains, transition the task in the same turn
+- do not leave finished implementation sitting in `pending` or `in_progress` just because code and tests are done
+- if review or user signoff cannot happen yet, say exactly what is missing instead of silently leaving runtime stale
 
 ## Decision And Gotcha Rules
 
