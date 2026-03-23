@@ -113,9 +113,11 @@ To update a normal installed copy later:
 superplan update
 ```
 
-`superplan update` now does two things for normal installed copies:
+`superplan update` now does four things for normal installed copies:
 
-- updates the installed CLI
+- resolves the latest published GitHub release for the configured Superplan repo
+- stops managed running Superplan CLI and overlay companion processes before reinstalling
+- updates the installed CLI and bundled overlay companion to that release
 - refreshes bundled Superplan skills for any existing global or repo-local setup it finds in the current environment
 
 If `superplan update` returns `Unknown command: update`, the installed binary is older than the update feature. In that case, do a one-time manual refresh from a checkout:
