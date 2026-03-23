@@ -270,5 +270,5 @@ test('remove rejects non-interactive agent mode without explicit scope and confi
   assert.equal(payload.ok, false);
   assert.equal(payload.error.code, 'INVALID_REMOVE_COMMAND');
   assert.match(payload.error.message, /Remove requires --scope in non-interactive mode/);
-  assert.match(payload.error.message, /superplan remove --scope <local\|global\|both\|skip> --yes --json/);
+  assert.match(payload.error.message, /superplan remove --scope <local\|global\|skip> --yes --json/);
 });

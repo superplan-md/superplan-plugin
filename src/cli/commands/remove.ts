@@ -13,7 +13,7 @@ interface AgentEnvironment {
   cleanup_paths?: string[];
 }
 
-type RemoveScope = 'global' | 'local' | 'both' | 'skip';
+type RemoveScope = 'global' | 'local' | 'skip';
 type AgentScope = 'project' | 'global';
 
 export interface RemoveOptions {
@@ -56,7 +56,7 @@ function getOptionValue(args: string[], optionName: string): string | undefined 
 }
 
 function isRemoveScope(value: string | undefined): value is RemoveScope {
-  return value === 'global' || value === 'local' || value === 'both' || value === 'skip';
+  return value === 'global' || value === 'local' || value === 'skip';
 }
 
 export function getRemoveCommandHelpMessage(invalidScope?: string): string {
@@ -68,11 +68,11 @@ export function getRemoveCommandHelpMessage(invalidScope?: string): string {
     intro,
     '',
     'Usage:',
-    '  superplan remove --scope <local|global|both|skip> --yes --json',
+    '  superplan remove --scope <local|global|skip> --yes --json',
     '  superplan remove                 # interactive mode',
     '',
     'Options:',
-    '  --scope <scope>   local, global, both, or skip',
+    '  --scope <scope>   local, global, or skip',
     '  --yes             confirm the destructive action without a prompt',
     '  --json            return structured output',
     '',
@@ -363,9 +363,8 @@ async function removeCommand(
       scope = await select<RemoveScope>({
         message: 'Where do you want to remove Superplan?',
         choices: [
-          { name: 'Global (machine-level)', value: 'global' },
-          { name: 'Local (current repository)', value: 'local' },
-          { name: 'Both', value: 'both' },
+          { name: 'Global (machine-level and this repository)', value: 'global' },
+          { name: 'Local (this repository only)', value: 'local' },
           { name: 'Skip', value: 'skip' },
         ],
       });
@@ -413,14 +412,14 @@ async function removeCommand(
       deps.currentPackageRoot ?? path.resolve(__dirname, '../../..'),
       deps.invokedEntryPath ?? process.argv[1] ?? '',
     );
-    const globalAgents = scope === 'global' || scope === 'both'
+    const globalAgents = scope === 'global'
       ? await detectAgents(homeDir, 'global', managedSkillNames)
       : [];
-    const localAgents = scope === 'local' || scope === 'both'
+    const localAgents = scope === 'local' || scope === 'global'
       ? await detectAgents(localRootDir, 'project', managedSkillNames)
       : [];
 
-    if (scope === 'global' || scope === 'both') {
+    if (scope === 'global') {
       await removeAgentInstalls(globalAgents, managedSkillNames, removedPaths);
       for (const installedCliTarget of installedCliTargets) {
         await removePath(installedCliTarget, removedPaths);
@@ -431,7 +430,7 @@ async function removeCommand(
       await removePath(path.join(homeDir, '.config', 'superplan'), removedPaths);
     }
 
-    if (scope === 'local' || scope === 'both') {
+    if (scope === 'local' || scope === 'global') {
       await removeAgentInstalls(localAgents, managedSkillNames, removedPaths);
       await removePath(localSuperplanDir, removedPaths);
     }

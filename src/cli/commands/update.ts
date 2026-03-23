@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as https from 'node:https';
 import { spawn } from 'node:child_process';
 import { readInstallMetadata, type InstallMetadata } from '../install-metadata';
-import { refreshInstalledSkills, type RefreshInstalledSkillsResult } from './setup';
+import { refreshInstalledSkills, type RefreshInstalledSkillsResult } from './init';
 
 const DEFAULT_REPO_URL = 'https://github.com/superplan-md/superplan-plugin.git';
 const DEFAULT_REF = 'dev';

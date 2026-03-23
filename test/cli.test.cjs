@@ -142,7 +142,7 @@ test('remove --help explains the explicit non-interactive agent-safe path', asyn
 
   assert.equal(result.code, 0);
   assert.match(result.stdout, /Remove deletes Superplan installation and state/);
-  assert.match(result.stdout, /superplan remove --scope <local\|global\|both\|skip> --yes --json/);
+  assert.match(result.stdout, /superplan remove --scope <local\|global\|skip> --yes --json/);
   assert.match(result.stdout, /superplan remove\s+# interactive mode/);
 });
 
@@ -241,8 +241,8 @@ test('overlay show was merged into ensure', async () => {
   assert.match(payload.error.message, /Use "ensure" instead\./);
 });
 
-test('setup in human mode prints a concise success message instead of the full payload', async () => {
-  const sandbox = await makeSandbox('superplan-setup-human-output-');
+test('init in human mode prints a concise success message instead of the full payload', async () => {
+  const sandbox = await makeSandbox('superplan-init-human-output-');
   const { routeCommand } = loadDistModule('cli/router.js', {
     select: async () => 'global',
     confirm: async () => false,

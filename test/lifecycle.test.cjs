@@ -12,10 +12,10 @@ const {
   withSandboxEnv,
 } = require('./helpers.cjs');
 
-test('setup quiet installs bundled global assets into the configured home directory', async () => {
-  const sandbox = await makeSandbox('superplan-setup-quiet-');
+test('init quiet installs bundled global assets into the configured home directory', async () => {
+  const sandbox = await makeSandbox('superplan-init-quiet-');
   await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
-  const setupResult = await runCli(['setup', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  const setupResult = await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(setupResult);
 
   assert.equal(setupResult.code, 0);
@@ -105,9 +105,9 @@ test('setup quiet installs bundled global assets into the configured home direct
   assert.match(installedRouteSkill, /under-shaping large ambiguous work just to preserve the appearance of low ceremony/i);
 });
 
-test('interactive setup prints the current ascii wordmark once', async () => {
-  const sandbox = await makeSandbox('superplan-setup-banner-');
-  const { setup } = loadDistModule('cli/commands/setup.js', {
+test('interactive init prints the current ascii wordmark once', async () => {
+  const sandbox = await makeSandbox('superplan-init-banner-');
+  const { init } = loadDistModule('cli/commands/init.js', {
     select: async () => 'skip',
   });
 
@@ -118,7 +118,7 @@ test('interactive setup prints the current ascii wordmark once', async () => {
   };
 
   try {
-    const result = await withSandboxEnv(sandbox, async () => setup({ json: false, quiet: false }));
+    const result = await withSandboxEnv(sandbox, async () => init({ json: false, quiet: false }));
     assert.equal(result.ok, true);
     assert.equal(result.data.scope, 'skip');
   } finally {
@@ -130,11 +130,10 @@ test('interactive setup prints the current ascii wordmark once', async () => {
   assert.equal((bannerOutput.match(/____  _   _ ____/g) ?? []).length, 1);
 });
 
-test('interactive setup installs only the selected agent integrations', async () => {
-  const sandbox = await makeSandbox('superplan-setup-selector-');
+test('interactive init auto-installs global agents and prompts for local agents', async () => {
+  const sandbox = await makeSandbox('superplan-init-selector-');
   const confirmAnswers = [false, false];
   const checkboxAnswers = [
-    ['claude'],
     ['codex'],
   ];
   const seenCheckboxChoices = [];
@@ -142,7 +141,7 @@ test('interactive setup installs only the selected agent integrations', async ()
   await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
   await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
 
-  const { setup } = loadDistModule('cli/commands/setup.js', {
+  const { init } = loadDistModule('cli/commands/init.js', {
     select: async () => 'both',
     confirm: async () => confirmAnswers.shift() ?? false,
     checkbox: async options => {
@@ -164,20 +163,20 @@ test('interactive setup installs only the selected agent integrations', async ()
     },
   });
 
-  const result = await withSandboxEnv(sandbox, async () => setup({ json: false, quiet: false }));
+  const result = await withSandboxEnv(sandbox, async () => init({ json: false, quiet: false }));
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'both');
   assert.equal(confirmAnswers.length, 0);
   assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), ['claude', 'codex']);
-  assert.equal(seenCheckboxChoices.length, 2);
-  assert.equal(seenCheckboxChoices[0].some(choice => choice.value === 'claude'), true);
+  assert.equal(seenCheckboxChoices.length, 1);
+  assert.equal(seenCheckboxChoices[0].some(choice => choice.value === 'codex'), true);
   assert.equal(seenCheckboxChoices[0].some(choice => choice.value === '__all_agents__'), true);
-  assert.equal(seenCheckboxChoices[0].every(choice => choice.checked === false), true);
-  assert.match(seenCheckboxChoices[0].map(choice => choice.name).join(', '), /Claude Code/);
-  assert.equal(seenCheckboxChoices[1].some(choice => choice.value === 'codex'), true);
-  assert.equal(seenCheckboxChoices[1].some(choice => choice.value === '__all_agents__'), true);
-  assert.equal(seenCheckboxChoices[1].every(choice => choice.checked === false), true);
+  
+  // Codex should be pre-checked because we created .codex in cwd
+  const codexChoice = seenCheckboxChoices[0].find(c => c.value === 'codex');
+  assert.equal(codexChoice.checked, true);
+
   assert.ok(await pathExists(path.join(sandbox.home, '.claude', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.equal(await pathExists(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml')), false);
   assert.ok(await pathExists(path.join(sandbox.cwd, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
@@ -185,7 +184,7 @@ test('interactive setup installs only the selected agent integrations', async ()
 });
 
 test('interactive local setup from a nested repo directory installs into the repo root workspace', async () => {
-  const sandbox = await makeSandbox('superplan-setup-nested-root-');
+  const sandbox = await makeSandbox('superplan-init-nested-root-');
   const nestedCwd = path.join(sandbox.cwd, 'apps', 'overlay-desktop');
   const expectedWorkspaceRoot = await fs.realpath(sandbox.cwd);
   const previousCwd = process.cwd();
@@ -196,7 +195,7 @@ test('interactive local setup from a nested repo directory installs into the rep
   await fs.mkdir(path.join(sandbox.cwd, '.codex'), { recursive: true });
   await fs.mkdir(nestedCwd, { recursive: true });
 
-  const { setup } = loadDistModule('cli/commands/setup.js', {
+  const { init } = loadDistModule('cli/commands/init.js', {
     select: async () => 'local',
     confirm: async () => confirmAnswers.shift() ?? false,
     checkbox: async () => ['codex'],
@@ -206,7 +205,7 @@ test('interactive local setup from a nested repo directory installs into the rep
   process.env.HOME = sandbox.home;
 
   try {
-    const result = await setup({ json: false, quiet: false });
+    const result = await init({ json: false, quiet: false });
 
     assert.equal(result.ok, true);
     assert.equal(result.data.scope, 'local');
@@ -227,8 +226,8 @@ test('interactive local setup from a nested repo directory installs into the rep
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
-test('interactive setup select-all option installs every supported machine-level agent integration', async () => {
-  const sandbox = await makeSandbox('superplan-setup-select-all-');
+test('interactive init select-all option installs every supported machine-level agent integration', async () => {
+  const sandbox = await makeSandbox('superplan-init-select-all-');
   const confirmAnswers = [false];
 
   await fs.mkdir(path.join(sandbox.home, '.claude'), { recursive: true });
@@ -236,43 +235,22 @@ test('interactive setup select-all option installs every supported machine-level
   await fs.mkdir(path.join(sandbox.home, '.cursor'), { recursive: true });
   await fs.mkdir(path.join(sandbox.home, '.codex'), { recursive: true });
   await fs.mkdir(path.join(sandbox.home, '.config', 'opencode'), { recursive: true });
+  await fs.mkdir(path.join(sandbox.home, '.antigravity'), { recursive: true });
 
-  const { setup } = loadDistModule('cli/commands/setup.js', {
+  const { init } = loadDistModule('cli/commands/init.js', {
     select: async () => 'global',
     confirm: async () => confirmAnswers.shift() ?? false,
-    checkbox: async options => {
-      assert.equal(options.message, 'Select machine-level AI agents');
-      assert.equal(
-        options.instructions,
-        '\n! Found: Claude Code, Codex, Gemini, Cursor, OpenCode, Amazon Q, Antigravity\n! Space = select, Enter = continue',
-      );
-      assert.deepEqual(options.theme, {
-        icon: {
-          checked: '[x]',
-          unchecked: '[ ]',
-        },
-      });
-      assert.deepEqual(options.choices.map(choice => choice.name), [
-        'Claude Code',
-        'Codex',
-        'Gemini',
-        'Cursor',
-        'OpenCode',
-        'Amazon Q',
-        'Antigravity',
-        'Select all found AI agents',
-      ]);
-      return ['__all_agents__'];
+    checkbox: async () => {
+      assert.fail('Global scope should not show a checkbox prompt for agents');
     },
   });
 
-  const result = await withSandboxEnv(sandbox, async () => setup({ json: false, quiet: false }));
+  const result = await withSandboxEnv(sandbox, async () => init({ json: false, quiet: false }));
 
   assert.equal(result.ok, true);
   assert.equal(result.data.scope, 'global');
   assert.equal(confirmAnswers.length, 0);
   assert.deepEqual(result.data.agents.map(agent => agent.name).sort(), [
-    'amazonq',
     'antigravity',
     'claude',
     'codex',
@@ -285,7 +263,6 @@ test('interactive setup select-all option installs every supported machine-level
   assert.ok(await pathExists(path.join(sandbox.home, '.cursor', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.codex', 'skills', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.config', 'opencode', 'skills', 'superplan-entry', 'SKILL.md')));
-  assert.ok(await pathExists(path.join(sandbox.home, '.amazonq', 'rules', 'superplan-entry', 'SKILL.md')));
   assert.ok(await pathExists(path.join(sandbox.home, '.antigravity', 'workflows', 'superplan-entry', 'SKILL.md')));
 
   const geminiCommand = await fs.readFile(path.join(sandbox.home, '.gemini', 'commands', 'superplan.toml'), 'utf-8');
@@ -301,7 +278,9 @@ test('interactive setup select-all option installs every supported machine-level
 test('doctor reports valid after quiet global setup in a clean repo', async () => {
   const sandbox = await makeSandbox('superplan-doctor-valid-');
   const fakeClaudeDir = path.join(sandbox.home, '.claude');
-  await runCli(['setup', '--quiet', '--json'], {
+  await fs.mkdir(fakeClaudeDir, { recursive: true });
+
+  await runCli(['init', '--quiet', '--json'], {
     cwd: sandbox.cwd,
     env: sandbox.env,
   });
@@ -348,7 +327,7 @@ test('init quiet requires global setup before repo initialization', async () => 
   assert.deepEqual(payload, {
     ok: false,
     error: {
-      code: 'SETUP_REQUIRED',
+      code: 'INIT_REQUIRED',
       message: 'Global setup is required before init',
       retryable: true,
     },
@@ -364,7 +343,7 @@ test('init json requires global setup before repo initialization without prompti
   assert.deepEqual(payload, {
     ok: false,
     error: {
-      code: 'SETUP_REQUIRED',
+      code: 'INIT_REQUIRED',
       message: 'Global setup is required before init',
       retryable: true,
     },
@@ -374,7 +353,7 @@ test('init json requires global setup before repo initialization without prompti
 test('init quiet creates repository scaffolding after setup is complete', async () => {
   const sandbox = await makeSandbox('superplan-init-quiet-');
 
-  await runCli(['setup', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const initResult = await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(initResult);
 
@@ -400,7 +379,7 @@ test('init quiet creates repository scaffolding after setup is complete', async 
 test('init json creates repository scaffolding after setup is complete without prompting', async () => {
   const sandbox = await makeSandbox('superplan-init-json-');
 
-  await runCli(['setup', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
+  await runCli(['init', '--quiet', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const initResult = await runCli(['init', '--json'], { cwd: sandbox.cwd, env: sandbox.env });
   const payload = parseCliJson(initResult);
 
@@ -430,7 +409,7 @@ test('init quiet from a nested repo directory creates scaffolding at the repo ro
   await fs.mkdir(path.join(sandbox.cwd, '.git'), { recursive: true });
   await fs.mkdir(nestedCwd, { recursive: true });
 
-  await runCli(['setup', '--quiet', '--json'], { cwd: nestedCwd, env: sandbox.env });
+  await runCli(['init', '--quiet', '--json'], { cwd: nestedCwd, env: sandbox.env });
   const initResult = await runCli(['init', '--quiet', '--json'], { cwd: nestedCwd, env: sandbox.env });
   const payload = parseCliJson(initResult);
   const relativeRoot = path.relative(nestedCwd, path.join(sandbox.cwd, '.superplan')) || '.superplan';
