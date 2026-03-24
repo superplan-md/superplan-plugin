@@ -198,7 +198,7 @@ export async function install(options: InstallOptions = {}): Promise<InstallResu
     }
 
     const homeDir = os.homedir();
-    const sourceSkillsDir = path.resolve(__dirname, '../../skills');
+    const sourceSkillsDir = path.resolve(__dirname, '../../../output/skills');
     const globalConfigDir = path.join(homeDir, '.config', 'superplan');
     const globalConfigPath = path.join(globalConfigDir, 'config.toml');
     const globalSkillsDir = path.join(globalConfigDir, 'skills');

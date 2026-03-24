@@ -5,7 +5,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-entry_content=$(cat "${PLUGIN_ROOT}/skills/superplan-entry/SKILL.md" 2>&1 || echo "Error reading superplan-entry skill")
+if [ -f "${PLUGIN_ROOT}/skills/superplan-entry/SKILL.md" ]; then
+    entry_content=$(cat "${PLUGIN_ROOT}/skills/superplan-entry/SKILL.md")
+elif [ -f "${PLUGIN_ROOT}/output/skills/superplan-entry/SKILL.md" ]; then
+    entry_content=$(cat "${PLUGIN_ROOT}/output/skills/superplan-entry/SKILL.md")
+else
+    entry_content="Error: superplan-entry skill not found in ${PLUGIN_ROOT}/skills or ${PLUGIN_ROOT}/output/skills"
+fi
 
 escape_for_json() {
     local s="$1"

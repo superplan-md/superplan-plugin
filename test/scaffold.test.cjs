@@ -44,7 +44,11 @@ test('change new creates a canonical change skeleton', async () => {
   assert.match(tasksIndexContent, /## Graph Layout/);
   assert.match(tasksIndexContent, /## Notes/);
   assert.match(tasksIndexContent, /- Change ID: `improve-planning`/);
-  assert.match(tasksIndexContent, /Author the graph here before scaffolding task contracts with the CLI\./);
+  assert.match(tasksIndexContent, /Exact graph syntax the current CLI validates/);
+  assert.match(tasksIndexContent, /- `T-001` First task title/);
+  assert.match(tasksIndexContent, /- `T-002` Follow-up task title/);
+  assert.match(tasksIndexContent, /Do not use subsection-style task entries like:/);
+  assert.match(tasksIndexContent, /Author task entries in the exact `- `T-xxx` Title` graph format shown above before scaffolding task contracts with the CLI\./);
 });
 
 test('change new from a nested repo directory uses the repo-root superplan workspace', async () => {

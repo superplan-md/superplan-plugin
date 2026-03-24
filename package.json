@@ -5,12 +5,7 @@
   "license": "Apache-2.0",
   "files": [
     "dist",
-    ".claude-plugin",
-    ".cursor-plugin",
-    ".opencode",
-    "hooks",
-    "GEMINI.md",
-    "gemini-extension.json",
+    "output",
     "scripts/install.sh",
     "README.md",
     "package.json"
@@ -19,7 +14,7 @@
     "superplan": "./dist/cli/main.js"
   },
   "scripts": {
-    "build": "tsc && node ./scripts/copy-skills.js",
+    "build": "tsc && node ./scripts/copy-skills.js && ./scripts/generate-outputs.sh",
     "overlay:bundle": "npm --prefix apps/overlay-desktop run tauri build",
     "overlay:package": "node ./scripts/overlay-release.js package",
     "overlay:release": "npm --prefix apps/overlay-desktop run tauri build && node ./scripts/overlay-release.js package",

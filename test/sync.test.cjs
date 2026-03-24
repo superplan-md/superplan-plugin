@@ -87,6 +87,7 @@ Second task
       in_review: [],
       blocked: ['T-002'],
       needs_feedback: [],
+      message: 'Sync completed: 2 tasks parsed, 2 runtime fixes applied.',
       next_action: {
         type: 'command',
         command: 'superplan run --json',

@@ -24,6 +24,7 @@ export const MANAGED_AMAZONQ_MEMORY_BANK_END = '<!-- superplan-amazonq-memory-ba
 export interface ExtendedAgentEnvironment extends AgentEnvironment {
   detected?: boolean;
   global_skills_dir?: string;
+  source_subdir?: string;
 }
 
 export async function pathExists(targetPath: string): Promise<boolean> {
@@ -357,7 +358,12 @@ export async function installAmazonQMemoryBank(skillsDir: string, rulesDir: stri
 }
 
 export async function installAgentSkills(skillsDir: string, agents: ExtendedAgentEnvironment[]): Promise<void> {
+  // We need to copy templates from the CLI's installation package output/ dir, not the user's config dir.
+  const sourceOutputDir = path.resolve(__dirname, '../../../output');
+
   for (const agent of agents) {
+    await copyAgentBaseFiles(sourceOutputDir, agent);
+
     if (agent.install_kind === 'skills_namespace') {
       await installSkillsNamespace(skillsDir, agent.install_path);
 
@@ -409,12 +415,35 @@ export async function installAgentSkills(skillsDir: string, agents: ExtendedAgen
   }
 }
 
+async function copyAgentBaseFiles(outputDir: string, agent: ExtendedAgentEnvironment): Promise<void> {
+  if (!agent.source_subdir) return;
+  const sourceDir = path.join(outputDir, agent.source_subdir);
+  if (!await pathExists(sourceDir)) return;
+
+  const entries = await fs.readdir(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    // Skip the 'skills' or 'workflows' directories as they are handled separately
+    if (entry.name === 'skills' || entry.name === 'workflows') continue;
+
+    const src = path.join(sourceDir, entry.name);
+    const dest = path.join(agent.path, entry.name);
+
+    await fs.mkdir(path.dirname(dest), { recursive: true });
+    if (entry.isDirectory()) {
+      await fs.cp(src, dest, { recursive: true });
+    } else {
+      await fs.copyFile(src, dest);
+    }
+  }
+}
+
 export function getAgentDefinitions(baseDir: string, scope: AgentScope): ExtendedAgentEnvironment[] {
   if (scope === 'project') {
     return [
       {
         name: 'claude',
         path: path.join(baseDir, '.claude'),
+        source_subdir: 'claude',
         install_path: path.join(baseDir, '.claude', 'skills'),
         install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
@@ -423,6 +452,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'gemini',
         path: path.join(baseDir, '.gemini'),
+        source_subdir: 'gemini',
         install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
         install_kind: 'toml_command',
         bootstrap_strength: 'context_bootstrap',
@@ -430,6 +460,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'cursor',
         path: path.join(baseDir, '.cursor'),
+        source_subdir: 'cursor',
         install_path: path.join(baseDir, '.cursor', 'skills'),
         install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
@@ -438,6 +469,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'codex',
         path: path.join(baseDir, '.codex'),
+        source_subdir: 'codex',
         install_path: path.join(baseDir, '.codex', 'skills'),
         install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
@@ -446,6 +478,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'opencode',
         path: path.join(baseDir, '.opencode'),
+        source_subdir: 'opencode',
         install_path: path.join(baseDir, '.opencode', 'skills'),
         install_kind: 'skills_namespace',
         bootstrap_strength: 'skills_only',
@@ -466,6 +499,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'antigravity',
         path: path.join(baseDir, '.agents'),
+        source_subdir: 'agents',
         install_path: path.join(baseDir, '.agents', 'workflows'),
         install_kind: 'antigravity_workflows',
         bootstrap_strength: 'rule_bootstrap',
@@ -478,6 +512,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
     {
       name: 'claude',
       path: path.join(baseDir, '.claude'),
+      source_subdir: 'claude',
       install_path: path.join(baseDir, '.claude', 'skills'),
       install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
@@ -486,6 +521,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
     {
       name: 'gemini',
       path: path.join(baseDir, '.gemini'),
+      source_subdir: 'gemini',
       install_path: path.join(baseDir, '.gemini', 'commands', 'superplan.toml'),
       install_kind: 'toml_command',
       bootstrap_strength: 'context_bootstrap',
@@ -493,6 +529,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
     {
       name: 'cursor',
       path: path.join(baseDir, '.cursor'),
+      source_subdir: 'cursor',
       install_path: path.join(baseDir, '.cursor', 'skills'),
       install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
@@ -501,6 +538,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
     {
       name: 'codex',
       path: path.join(baseDir, '.codex'),
+      source_subdir: 'codex',
       install_path: path.join(baseDir, '.codex', 'skills'),
       install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
@@ -509,6 +547,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
     {
       name: 'opencode',
       path: path.join(baseDir, '.config', 'opencode'),
+      source_subdir: 'opencode',
       install_path: path.join(baseDir, '.config', 'opencode', 'skills'),
       install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
@@ -518,6 +557,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
     {
       name: 'antigravity',
       path: path.join(baseDir, '.gemini'),
+      source_subdir: 'gemini',
       install_path: path.join(baseDir, '.gemini', 'GEMINI.md'),
       install_kind: 'managed_global_rule',
       bootstrap_strength: 'rule_bootstrap',
@@ -657,7 +697,7 @@ export async function refreshInstalledSkills(): Promise<RefreshInstalledSkillsRe
   try {
     const homeDir = os.homedir();
     const globalConfigDir = path.join(homeDir, '.config', 'superplan');
-    const sourceSkillsDir = path.resolve(__dirname, '../../skills');
+    const sourceSkillsDir = path.resolve(__dirname, '../../../output/skills');
 
     if (!await pathExists(globalConfigDir)) {
       return { ok: true, data: { refreshed: false, scope: 'skip' } };

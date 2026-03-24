@@ -106,8 +106,9 @@ Important install note:
   - `## Graph Layout` (mandatory section for the parser)
 - **Graph Layout Format**: Task entries must use the exact syntax `` - `T-xxx` Task title ``.
   - The ID must be backtick-wrapped.
-  - Dependencies are indented sub-items: `  - depends_on_all: [T-001]`.
-  - The scaffolded `tasks.md` template includes a commented-out example showing this format.
+  - Dependencies are indented sub-items such as `  - depends_on_all: [T-001]` and `  - depends_on_any: []`.
+  - Sectioned task-entry prose like `### T-001`, `- **Goal:**`, or `- **Depends on:**` is not accepted by the current validator.
+  - The scaffolded `tasks.md` template includes a commented exact example of the accepted format.
 - Required sections in the resulting task contracts (`T-xxx.md`) include:
   - `## Description`
   - `## Acceptance Criteria`

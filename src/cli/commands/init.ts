@@ -135,7 +135,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     const workspaceRoot = resolveWorkspaceRoot(process.cwd());
     const cwd = workspaceRoot;
-    const sourceSkillsDir = path.resolve(__dirname, '../../skills');
+    const sourceSkillsDir = path.resolve(__dirname, '../../../output/skills');
     const superplanRoot = path.join(workspaceRoot, '.superplan');
     const localSkillsDir = path.join(superplanRoot, 'skills');
 

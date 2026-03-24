@@ -110,9 +110,15 @@ superplan init
 
 ```bash
 superplan change new my-feature --json
-# author .superplan/changes/my-feature/tasks.md
+# author .superplan/changes/my-feature/tasks.md using the exact graph syntax:
+# - `T-001` First task title
+#   - depends_on_all: []
+#   - depends_on_any: []
+# - `T-002` Follow-up task title
+#   - depends_on_all: [T-001]
+#   - depends_on_any: []
 superplan validate my-feature --json
-superplan task batch my-feature --stdin --json
+superplan task scaffold batch my-feature --stdin --json
 ```
 
 ## The Workflow Loop
