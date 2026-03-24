@@ -21,14 +21,15 @@ set -eu
 # - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run machine init after install, 0 to skip it
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/superplan-plugin.git}"
-SUPERPLAN_REF="${SUPERPLAN_REF:-dev}"
+SUPERPLAN_REF="${SUPERPLAN_REF:-}"
 SUPERPLAN_SOURCE_DIR="${SUPERPLAN_SOURCE_DIR:-}"
 SUPERPLAN_INSTALL_PREFIX="${SUPERPLAN_INSTALL_PREFIX:-}"
 SUPERPLAN_OVERLAY_SOURCE_PATH="${SUPERPLAN_OVERLAY_SOURCE_PATH:-}"
-SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_OVERLAY_RELEASE_BASE_URL:-https://github.com/superplan-md/superplan-plugin/releases/download/${SUPERPLAN_REF}}"
+SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_OVERLAY_RELEASE_BASE_URL:-}"
 SUPERPLAN_OVERLAY_INSTALL_DIR="${SUPERPLAN_OVERLAY_INSTALL_DIR:-${HOME}/.local/share/superplan/overlay}"
 SUPERPLAN_ENABLE_OVERLAY="${SUPERPLAN_ENABLE_OVERLAY:-1}"
 SUPERPLAN_RUN_SETUP_AFTER_INSTALL="${SUPERPLAN_RUN_SETUP_AFTER_INSTALL:-1}"
+SUPERPLAN_RESOLVED_REF=""
 
 OVERLAY_INSTALL_METHOD=""
 OVERLAY_INSTALL_PATH=""
@@ -135,6 +136,119 @@ EOF
   OVERLAY_ARCH="$(printf '%s\n' "$overlay_target" | sed -n '2p')"
   OVERLAY_ARTIFACT_NAME="$(printf '%s\n' "$overlay_target" | sed -n '3p')"
   OVERLAY_ARTIFACT_KIND="$(printf '%s\n' "$overlay_target" | sed -n '4p')"
+}
+
+resolve_latest_release_tag_from_github() {
+  node - "$SUPERPLAN_REPO_URL" <<'EOF'
+const https = require('node:https');
+
+function parseGitHubRepo(repoUrl) {
+  const sshMatch = String(repoUrl).match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/i);
+  if (sshMatch) {
+    return { owner: sshMatch[1], repo: sshMatch[2] };
+  }
+
+  try {
+    const parsedUrl = new URL(String(repoUrl));
+    if (parsedUrl.hostname !== 'github.com') {
+      return null;
+    }
+
+    const segments = parsedUrl.pathname.replace(/^\/+|\/+$/g, '').split('/');
+    if (segments.length < 2) {
+      return null;
+    }
+
+    return {
+      owner: segments[0],
+      repo: segments[1].replace(/\.git$/i, ''),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const parsedRepo = parseGitHubRepo(process.argv[2]);
+if (!parsedRepo) {
+  process.exit(2);
+}
+
+const request = https.get({
+  hostname: 'api.github.com',
+  path: `/repos/${parsedRepo.owner}/${parsedRepo.repo}/releases/latest`,
+  headers: {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'superplan-install',
+  },
+}, response => {
+  let body = '';
+  response.setEncoding('utf8');
+  response.on('data', chunk => {
+    body += chunk;
+  });
+  response.on('end', () => {
+    if ((response.statusCode ?? 500) >= 400) {
+      console.error(`GitHub latest release lookup failed with status ${response.statusCode}`);
+      process.exit(1);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(body);
+      const tag = String(parsed.tag_name || '').trim();
+      if (!tag) {
+        throw new Error('GitHub latest release response was missing tag_name');
+      }
+      process.stdout.write(tag);
+    } catch (error) {
+      console.error(error.message || String(error));
+      process.exit(1);
+    }
+  });
+});
+
+request.on('error', error => {
+  console.error(error.message || String(error));
+  process.exit(1);
+});
+EOF
+}
+
+resolve_install_ref() {
+  if [ -n "$SUPERPLAN_REF" ]; then
+    SUPERPLAN_RESOLVED_REF="$SUPERPLAN_REF"
+    return 0
+  fi
+
+  if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
+    SUPERPLAN_RESOLVED_REF="dev"
+    return 0
+  fi
+
+  latest_release_tag="$(resolve_latest_release_tag_from_github)" || latest_lookup_status=$?
+  latest_lookup_status="${latest_lookup_status:-0}"
+
+  if [ "$latest_lookup_status" -eq 0 ] && [ -n "$latest_release_tag" ]; then
+    SUPERPLAN_RESOLVED_REF="$latest_release_tag"
+    say "Resolved latest Superplan release: $SUPERPLAN_RESOLVED_REF"
+    return 0
+  fi
+
+  if [ "$latest_lookup_status" -eq 2 ]; then
+    SUPERPLAN_RESOLVED_REF="dev"
+    say "Repo URL is not a GitHub repo; defaulting install ref to $SUPERPLAN_RESOLVED_REF"
+    return 0
+  fi
+
+  fail "failed to resolve the latest GitHub release for $SUPERPLAN_REPO_URL; set SUPERPLAN_REF explicitly to a tag or branch to continue"
+}
+
+resolve_overlay_release_base_url() {
+  if [ -n "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" ]; then
+    return 0
+  fi
+
+  SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_REPO_URL%.git}/releases/download/${SUPERPLAN_RESOLVED_REF}"
 }
 
 resolve_packaged_overlay_source() {
@@ -365,6 +479,9 @@ if [ -n "$SUPERPLAN_INSTALL_PREFIX" ]; then
   export npm_config_prefix="$SUPERPLAN_INSTALL_PREFIX"
 fi
 
+resolve_install_ref
+resolve_overlay_release_base_url
+
 if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
   [ -d "$SUPERPLAN_SOURCE_DIR" ] || fail "SUPERPLAN_SOURCE_DIR does not exist: $SUPERPLAN_SOURCE_DIR"
   say "Copying Superplan source from $SUPERPLAN_SOURCE_DIR"
@@ -375,8 +492,8 @@ else
   git clone "$SUPERPLAN_REPO_URL" "$SOURCE_WORKTREE" >/dev/null 2>&1
   (
     cd "$SOURCE_WORKTREE"
-    git checkout "$SUPERPLAN_REF" >/dev/null 2>&1
-  ) || fail "failed to check out ref: $SUPERPLAN_REF"
+    git checkout "$SUPERPLAN_RESOLVED_REF" >/dev/null 2>&1
+  ) || fail "failed to check out ref: $SUPERPLAN_RESOLVED_REF"
 fi
 
 [ -f "$SOURCE_WORKTREE/package.json" ] || fail "package.json not found in installer worktree"
@@ -431,7 +548,7 @@ if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
 fi
 
 mkdir -p "$INSTALL_STATE_DIR"
-node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$OVERLAY_EXECUTABLE_RELATIVE_PATH" "$OVERLAY_ARTIFACT_NAME" "$OVERLAY_PLATFORM" "$OVERLAY_ARCH" "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" <<'EOF'
+node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_RESOLVED_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$OVERLAY_EXECUTABLE_RELATIVE_PATH" "$OVERLAY_ARTIFACT_NAME" "$OVERLAY_PLATFORM" "$OVERLAY_ARCH" "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" <<'EOF'
 const fs = require('node:fs');
 
 const [

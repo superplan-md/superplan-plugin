@@ -89,7 +89,15 @@ Each skill enforces structure so the agent doesn’t drift.
 ### 1. Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | sh
+```
+
+That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
+
+If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh
 ```
 
 ### 2. Initialize

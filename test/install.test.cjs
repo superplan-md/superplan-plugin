@@ -153,6 +153,23 @@ test('install script defaults bundled overlay installs to enabled', async () => 
   );
 });
 
+test('install script resolves the latest GitHub release when no ref is pinned', async () => {
+  const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.sh'), 'utf-8');
+
+  assert.match(
+    installerSource,
+    /SUPERPLAN_REF="\$\{SUPERPLAN_REF:-\}"/,
+  );
+  assert.match(
+    installerSource,
+    /releases\/latest/,
+  );
+  assert.match(
+    installerSource,
+    /Resolved latest Superplan release:/,
+  );
+});
+
 test('install script stops a running installed overlay before replacing it', async () => {
   const sandbox = await makeSandbox('superplan-install-overlay-replace-');
   const prefixDir = path.join(sandbox.root, 'prefix');
