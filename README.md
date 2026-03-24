@@ -22,7 +22,7 @@ Superplan does.
 ## Quick Start
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
 ```
 
 That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
@@ -97,7 +97,7 @@ Each skill enforces structure so the agent doesn’t drift.
 ### 1. Install Latest version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh
 ```
 
 That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
@@ -105,7 +105,7 @@ That uses a stable installer URL and resolves the latest published GitHub releas
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/dev/scripts/install.sh | SUPERPLAN_REF=<version-tag> sh
+curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | SUPERPLAN_REF=<version-tag> sh
 ```
 
 ### 2. Initialize

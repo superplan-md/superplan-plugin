@@ -222,12 +222,12 @@ resolve_install_ref() {
   fi
 
   if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
-    SUPERPLAN_RESOLVED_REF="dev"
+    SUPERPLAN_RESOLVED_REF="main"
     return 0
   fi
 
-  # Default to dev for the CLI source to ensure latest fixes
-  SUPERPLAN_RESOLVED_REF="dev"
+  # Default to main for the CLI source to ensure latest fixes
+  SUPERPLAN_RESOLVED_REF="main"
   say "Defaulting Superplan CLI source to: $SUPERPLAN_RESOLVED_REF"
 }
 
@@ -246,8 +246,8 @@ resolve_overlay_ref() {
     return 0
   fi
 
-  # Fallback to dev if no release found
-  SUPERPLAN_OVERLAY_REF="dev"
+  # Fallback to main if no release found
+  SUPERPLAN_OVERLAY_REF="main"
   say "No release tag found; defaulting overlay ref to $SUPERPLAN_OVERLAY_REF"
 }
 
