@@ -487,6 +487,29 @@ if [ -n "$SUPERPLAN_INSTALL_PREFIX" ]; then
   export npm_config_prefix="$SUPERPLAN_INSTALL_PREFIX"
 fi
 
+# On Linux the default npm global prefix is typically /usr/local which
+# requires root.  When no explicit prefix was requested, detect this and
+# fall back to $HOME/.local so the install succeeds without sudo.
+ensure_writable_prefix() {
+  # Skip when the user already chose a prefix.
+  [ -z "$SUPERPLAN_INSTALL_PREFIX" ] || return 0
+
+  _current_prefix="$(npm prefix --global 2>/dev/null)" || return 0
+
+  if [ -w "$_current_prefix" ] && [ -w "${_current_prefix}/bin" ] 2>/dev/null; then
+    return 0
+  fi
+
+  _fallback_prefix="${HOME}/.local"
+  say "Default npm global prefix ($_current_prefix) is not writable."
+  say "Falling back to $_fallback_prefix (no sudo required)."
+  export npm_config_prefix="$_fallback_prefix"
+  SUPERPLAN_INSTALL_PREFIX="$_fallback_prefix"
+  mkdir -p "$_fallback_prefix/bin" "$_fallback_prefix/lib" 2>/dev/null || true
+}
+
+ensure_writable_prefix
+
 resolve_install_ref
 resolve_overlay_ref
 resolve_overlay_release_base_url
@@ -627,5 +650,22 @@ say "Installed Superplan to $INSTALL_BIN_DIR/superplan"
 if [ -n "$OVERLAY_INSTALL_PATH" ]; then
   say "Installed Superplan overlay to $OVERLAY_INSTALL_PATH"
 fi
+
+# PATH guidance: warn the user if the install bin dir is not on PATH.
+case ":$PATH:" in
+  *":$INSTALL_BIN_DIR:"*)
+    ;;
+  *)
+    say ""
+    say "NOTE: $INSTALL_BIN_DIR is not on your PATH."
+    say "Add it by running one of:"
+    say ""
+    say "  echo 'export PATH=\"$INSTALL_BIN_DIR:\$PATH\"' >> ~/.bashrc   # bash"
+    say "  echo 'export PATH=\"$INSTALL_BIN_DIR:\$PATH\"' >> ~/.zshrc    # zsh"
+    say ""
+    say "Then restart your shell or run:  source ~/.bashrc"
+    ;;
+esac
+
 say "Run: superplan --version"
 say "Then run: superplan init inside a repository to start using Superplan"
