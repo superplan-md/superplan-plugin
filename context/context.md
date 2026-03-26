@@ -22,7 +22,9 @@ The current documented top-level command surface is:
 
 - `change`
 - `init`
-
+- `install`
+- `context`
+- `validate`
 - `sync`
 - `update`
 - `remove`
@@ -38,14 +40,14 @@ The current documented top-level command surface is:
 
 Supported install paths in the current repo are:
 
-- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 sh`
-- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/alpha.4/scripts/install.sh | SUPERPLAN_REF=alpha.4 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
+- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 sh`
+- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
 - npm from a local checkout after build (release mode): `npm install -g .`
 - npm link for active local development: `npm link` from the project root after `npm run build`.
 
 Important install note:
 
-- Public quick-start docs pin the installer to `alpha.4` by using both the tagged raw URL and `SUPERPLAN_REF=alpha.4`, because `scripts/install.sh` still defaults `SUPERPLAN_REF` to `dev` when that env var is absent.
+- Public quick-start docs pin the installer to `0.1.0` by using both the tagged raw URL and `SUPERPLAN_REF=0.1.0`, because `scripts/install.sh` still defaults `SUPERPLAN_REF` to `dev` when that env var is absent.
 - `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later and then refresh existing skill installs.
 - Older installed binaries that predate the `update` command still need one manual rebuild/reinstall before `superplan update` becomes available.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
@@ -56,6 +58,9 @@ Important install note:
 - `src/cli/router.ts`: Maps top-level commands to command handlers and normalizes CLI responses.
 - `src/cli/commands/change.ts`: Creates new change scaffolding under `.superplan/changes/<slug>/`.
 - `src/cli/commands/init.ts`: Creates `.superplan/` scaffolding (config, context, runtime, changes) and handles agent integration setup. Interactive mode scans for agent environments, presents a checklist of found agents, and installs selected entries across global, local, both, and skip flows.
+- `src/cli/commands/install.ts`: Installs the Superplan CLI globally on the machine.
+- `src/cli/commands/context.ts`: Manages durable workspace context artifacts (bootstrap, status).
+- `src/cli/commands/validate.ts`: Validates `tasks.md` graph and task-contract consistency.
 - `src/cli/commands/update.ts`: Reruns the bundled installer for normal installed copies of the CLI using recorded install metadata, then refreshes existing skill installs.
 - `src/cli/commands/remove.ts`: Removes or purges Superplan installation state. Machine-level removal also uninstalls the managed CLI package/bin, symlinked dev installs that can be inferred from the invoked `superplan` bin path, and overlay artifacts when they are recorded or inferable, and local removal targets the nearest parent Superplan workspace rather than only the exact current directory.
 - `src/cli/commands/doctor.ts`: Validates setup state and, in deep mode, inspects parsed tasks plus runtime consistency.
@@ -92,8 +97,8 @@ Important install note:
 ## Task Storage And Parsing
 
 - Default parsing path is `.superplan/changes`, not repo-root `changes/`.
-- Task contracts live at `.superplan/changes/<slug>/tasks/T-xxx.md` and should normally be minted with `superplan task new` after the owning `tasks.md` graph is shaped.
-- Task IDs are allocated globally across `.superplan/changes/`, not restarted per change.
+- Task contracts live at `.superplan/changes/<slug>/tasks/T-xxx.md` and should normally be minted with `superplan task scaffold new` after the owning `tasks.md` graph is shaped.
+- Parsed task payloads now expose the local `task_id`, the owning `change_id`, and a qualified task reference used for runtime identity and unambiguous command routing (for example `change-slug/T-001`).
 - Parsed tasks currently rely on frontmatter such as:
   - `task_id`
   - `status`
@@ -134,22 +139,22 @@ Runtime truth is stored under `.superplan/runtime/`.
 
 The core execution loop is:
 
-- `superplan status --json`
-- `superplan run --json`
-- `superplan task show <task_id> --json`
+- `superplan status --json` (initially check the frontier)
+- `superplan run --json` (returns a fully qualified task identity for the next actionable task)
+- `superplan task inspect show <change-slug/T-001> --json`
 
 The primary authoring loop is:
 
 - `superplan change new <change-slug> --json`
-- `superplan task new <change-slug> --title "..." --json`
-- `superplan task batch <change-slug> --stdin --json`
+- `superplan task scaffold new <change-slug> --task-id <task_id> --json`
+- `superplan task scaffold batch <change-slug> --stdin --json`
 
 Authoring rule:
 
 - let the main graph breakdown live in `.superplan/changes/<slug>/tasks.md` first
 - manual creation of individual `.superplan/changes/<slug>/tasks/T-xxx.md` files is off limits
-- once the graph structure is ready, use `superplan task new` for one task or `superplan task batch` for multiple tasks instead of hand-creating task files
-- when two or more tasks are already clear enough to author together, `superplan task batch --stdin --json` is the default path
+- once the graph structure is ready, use `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks instead of hand-creating task files
+- when two or more tasks are already clear enough to author together, `superplan task scaffold batch --stdin --json` is the default path
 
 The repo-refresh loop is:
 
@@ -159,21 +164,21 @@ Important runtime commands:
 
 - `superplan status --json`
 - `superplan run --json`
-- `superplan task show <task_id> --json`
-- `superplan task block <task_id> --reason "..."`
-- `superplan task request-feedback <task_id> --message "..."`
-- `superplan task approve <task_id> --json`
-- `superplan task reopen <task_id> --reason "..."`
-- `superplan task fix --json`
-- `superplan task complete <task_id> --json`
+- `superplan task inspect show <change-slug/T-001> --json`
+- `superplan task runtime block <change-slug/T-001> --reason "..."`
+- `superplan task runtime request-feedback <change-slug/T-001> --message "..."`
+- `superplan task review approve <change-slug/T-001> --json`
+- `superplan task review reopen <change-slug/T-001> --reason "..."`
+- `superplan task repair fix --json`
+- `superplan task review complete <change-slug/T-001> --json`
 - `superplan visibility report --json`
 
-Task markdown should not be hand-edited to reflect runtime lifecycle changes, and new `T-xxx.md` contracts should normally be minted with `superplan task new` for one task or `superplan task batch` for multiple tasks after `tasks.md` graph structure is ready.
+Task markdown should not be hand-edited to reflect runtime lifecycle changes, and new `T-xxx.md` contracts should normally be minted with `superplan task scaffold new` for one task or `superplan task scaffold batch` for multiple tasks after `tasks.md` graph structure is ready.
 
-Review handoff now works in two steps:
+Review handoff now works efficiently:
 
-- `superplan task complete <task_id> --json` moves finished implementation into `in_review`
-- `superplan task approve <task_id> --json` is the final review signoff and marks an in-review task as `done`
+- `superplan task complete <task_id> --json` automatically verifies acceptance criteria and moves the task straight to `done`. If review is strictly required, it routes to `in_review`.
+- `superplan task approve <task_id> --json` is the final review signoff for tasks stuck `in_review`, marking them `done`.
 - `superplan task reopen <task_id> --reason "..."` moves an in-review or done task back to `in_progress`
 
 ## Behavioral Notes
