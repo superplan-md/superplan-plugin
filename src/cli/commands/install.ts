@@ -141,11 +141,11 @@ export async function ensureGlobalSetup(
   await installSkills(sourceSkillsDir, skillsDir);
   
   if (await pathExists(path.join(homeDir, '.codex'))) {
-    await installManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'));
+    await installManagedInstructionsFile(path.join(homeDir, '.codex', 'AGENTS.md'), skillsDir);
   }
 
   if (await pathExists(path.join(homeDir, '.claude'))) {
-    await installManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'));
+    await installManagedInstructionsFile(path.join(homeDir, '.claude', 'CLAUDE.md'), skillsDir);
   }
 }
 

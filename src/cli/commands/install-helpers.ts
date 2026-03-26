@@ -190,9 +190,10 @@ export function upsertManagedBlock(existingContent: string, block: string, start
   return `${trimmed}\n\n${block}\n`;
 }
 
-export function getManagedEntryInstructionsBlock(targetPath: string): string {
+export function getManagedEntryInstructionsBlock(targetPath: string, globalSkillsDir: string): string {
+  const entryPath = path.join(globalSkillsDir, 'superplan-entry', 'SKILL.md');
   const agentLinks = [
-    '- `.superplan/skills/superplan-entry/SKILL.md`'
+    `- \`${entryPath}\``
   ].join('\n');
 
   return `${MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START}
@@ -245,12 +246,12 @@ ${entrySkillContent.trim()}
 ${MANAGED_AMAZONQ_MEMORY_BANK_END}`;
 }
 
-export async function installManagedInstructionsFile(targetPath: string): Promise<void> {
+export async function installManagedInstructionsFile(targetPath: string, globalSkillsDir: string): Promise<void> {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
   const existingContent = await fs.readFile(targetPath, 'utf-8').catch(() => '');
   const nextContent = upsertManagedBlock(
     existingContent,
-    getManagedEntryInstructionsBlock(targetPath),
+    getManagedEntryInstructionsBlock(targetPath, globalSkillsDir),
     MANAGED_ENTRY_INSTRUCTIONS_BLOCK_START,
     MANAGED_ENTRY_INSTRUCTIONS_BLOCK_END,
   );
@@ -350,29 +351,28 @@ export async function installAmazonQMemoryBank(skillsDir: string, rulesDir: stri
 
 export async function installAgentSkills(skillsDir: string, agents: ExtendedAgentEnvironment[]): Promise<void> {
   // We need to copy templates from the CLI's installation package output/ dir, not the user's config dir.
-  const sourceOutputDir = path.resolve(__dirname, '../../../output');
-
-  for (const agent of agents) {
+  const sourceOutputDir = path.resolve(__dirname, '../../../output');  for (const agent of agents) {
     await copyAgentBaseFiles(sourceOutputDir, agent);
+    const globalSkillsDir = agent.global_skills_dir ?? path.join(os.homedir(), '.config', 'superplan', 'skills');
 
     if (agent.install_kind && agent.install_path) {
       if (agent.install_kind === 'skills_namespace') {
-        await installSkillsNamespace(skillsDir, agent.install_path);
+        // SSoT: We stop physical mirroring into agent.install_path
+        // and instead verify the agent directory exists.
+        await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
       } else if (agent.install_kind === 'toml_command') {
         await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
         await fs.writeFile(agent.install_path, getGeminiCommandContent(), 'utf-8');
       } else if (agent.install_kind === 'pointer_rule') {
-        const globalSkillsDir = agent.global_skills_dir ?? path.join(os.homedir(), '.config', 'superplan', 'skills');
         await fs.mkdir(path.dirname(agent.install_path), { recursive: true });
         await fs.writeFile(agent.install_path, getPointerRuleContent(globalSkillsDir), 'utf-8');
       } else if (agent.install_kind === 'managed_global_rule') {
-        const antigravitySkillPath = path.join(skillsDir, CURRENT_ENTRY_SKILL_NAME, 'SKILL.md');
-        await installAntigravityGlobalRule(agent.install_path, antigravitySkillPath);
+        await installManagedInstructionsFile(agent.install_path, globalSkillsDir);
       } else if (agent.install_kind === 'amazonq_rules') {
-        await installAmazonQRules(skillsDir, agent.install_path);
-        await installAmazonQMemoryBank(skillsDir, agent.install_path);
+        await installAmazonQRules(globalSkillsDir, agent.install_path);
+        await installAmazonQMemoryBank(globalSkillsDir, agent.install_path);
       } else if (agent.install_kind === 'antigravity_workflows') {
-        await installAntigravityWorkflows(skillsDir, agent.install_path);
+        await installAntigravityWorkflows(globalSkillsDir, agent.install_path);
       }
     } else if (!agent.install_kind && agent.name === 'gemini') {
       // Legacy fallback for Gemini if needed, but project-level Gemini has install_kind

@@ -234,19 +234,6 @@ export async function doctor(args: string[] = []) {
         });
       }
     }
-
-    // Check for redundant local skills (SSoT check)
-    if (agent.cleanup_paths) {
-      for (const cleanupPath of agent.cleanup_paths) {
-        if (cleanupPath.endsWith('/skills') && await pathExists(cleanupPath)) {
-          issues.push({
-            code: 'AGENT_REDUNDANT_SKILLS',
-            message: `Redundant skills directory found for ${agent.name} at ${cleanupPath}`,
-            fix: `superplan init --yes --json`, // Init already handles cleanup in SSoT mode
-          });
-        }
-      }
-    }
   }
 
   if (overlayPreferences.effective_enabled && !overlayCompanion.launchable) {
