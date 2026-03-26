@@ -6,3 +6,7 @@ dist/
 npm-debug.log*
 .superplan
 changes
+.agents
+.amazonq
+.claude
+.codex
