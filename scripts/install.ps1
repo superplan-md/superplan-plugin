@@ -4,8 +4,19 @@ $SuperplanRepoUrl = if ($env:SUPERPLAN_REPO_URL) { $env:SUPERPLAN_REPO_URL } els
 $SuperplanRef = if ($env:SUPERPLAN_REF) { $env:SUPERPLAN_REF } else { '' }
 $SuperplanSourceDir = if ($env:SUPERPLAN_SOURCE_DIR) { $env:SUPERPLAN_SOURCE_DIR } else { '' }
 $SuperplanInstallPrefix = if ($env:SUPERPLAN_INSTALL_PREFIX) { $env:SUPERPLAN_INSTALL_PREFIX } else { '' }
+$SuperplanOverlaySourcePath = if ($env:SUPERPLAN_OVERLAY_SOURCE_PATH) { $env:SUPERPLAN_OVERLAY_SOURCE_PATH } else { '' }
+$SuperplanOverlayReleaseBaseUrl = if ($env:SUPERPLAN_OVERLAY_RELEASE_BASE_URL) { $env:SUPERPLAN_OVERLAY_RELEASE_BASE_URL } else { '' }
+$SuperplanOverlayInstallDir = if ($env:SUPERPLAN_OVERLAY_INSTALL_DIR) { $env:SUPERPLAN_OVERLAY_INSTALL_DIR } else { (Join-Path $HOME '.config\superplan\overlay') }
+$SuperplanEnableOverlay = if ($env:SUPERPLAN_ENABLE_OVERLAY) { $env:SUPERPLAN_ENABLE_OVERLAY } else { '1' }
 $SuperplanRunSetupAfterInstall = if ($env:SUPERPLAN_RUN_SETUP_AFTER_INSTALL) { $env:SUPERPLAN_RUN_SETUP_AFTER_INSTALL } else { '1' }
 $SuperplanResolvedRef = ''
+$SuperplanOverlayRef = ''
+$OverlayInstallMethod = ''
+$OverlayInstallPath = ''
+$OverlayExecutablePath = ''
+$OverlayArtifactName = ''
+$OverlayPlatform = ''
+$OverlayArch = ''
 
 function Say {
   param([string] $Message)
@@ -153,6 +164,107 @@ function Resolve-InstallRef {
   Say "No release tag found; defaulting Superplan source to $script:SuperplanResolvedRef"
 }
 
+function Resolve-OverlayRef {
+  if (-not [string]::IsNullOrWhiteSpace($SuperplanRef)) {
+    $script:SuperplanOverlayRef = $SuperplanRef
+    return
+  }
+
+  $latestReleaseTag = Resolve-LatestReleaseTagFromGitHub
+  if (-not [string]::IsNullOrWhiteSpace($latestReleaseTag)) {
+    $script:SuperplanOverlayRef = $latestReleaseTag
+    Say "Resolved latest Superplan overlay release: $script:SuperplanOverlayRef"
+    return
+  }
+
+  $script:SuperplanOverlayRef = 'main'
+  Say "No release tag found; defaulting overlay ref to $script:SuperplanOverlayRef"
+}
+
+function Resolve-OverlayReleaseBaseUrl {
+  if (-not [string]::IsNullOrWhiteSpace($SuperplanOverlayReleaseBaseUrl)) {
+    return
+  }
+
+  $script:SuperplanOverlayReleaseBaseUrl = $SuperplanRepoUrl -replace '\.git$', ''
+  $script:SuperplanOverlayReleaseBaseUrl = "$script:SuperplanOverlayReleaseBaseUrl/releases/download/$script:SuperplanOverlayRef"
+}
+
+function Resolve-OverlayReleaseTarget {
+  param([string] $SourceWorktree)
+
+  $overlayScriptPath = Join-Path $SourceWorktree 'scripts/overlay-release.js'
+  $targetJson = & node $overlayScriptPath target --platform win32 --arch $env:PROCESSOR_ARCHITECTURE 2>$null
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($targetJson)) {
+    Fail 'failed to resolve packaged overlay target for Windows'
+  }
+
+  $parsed = $targetJson | ConvertFrom-Json
+  $script:OverlayPlatform = [string] $parsed.platform
+  $script:OverlayArch = [string] $parsed.arch
+  $script:OverlayArtifactName = [string] $parsed.artifactName
+}
+
+function Resolve-PackagedOverlaySource {
+  param([string] $SourceWorktree, [string] $WorkDir)
+
+  if (-not [string]::IsNullOrWhiteSpace($SuperplanOverlaySourcePath)) {
+    $script:OverlayInstallMethod = 'copied_prebuilt'
+    return $true
+  }
+
+  $localArtifactPath = Join-Path $SourceWorktree "dist/release/overlay/$script:OverlayArtifactName"
+  if (Test-Path -LiteralPath $localArtifactPath -PathType Leaf) {
+    $script:SuperplanOverlaySourcePath = $localArtifactPath
+    $script:OverlayInstallMethod = 'copied_prebuilt'
+    return $true
+  }
+
+  $localBuildPath = Join-Path $SourceWorktree 'apps/overlay-desktop/src-tauri/target/release/superplan-overlay-desktop.exe'
+  if (Test-Path -LiteralPath $localBuildPath -PathType Leaf) {
+    $script:SuperplanOverlaySourcePath = $localBuildPath
+    $script:OverlayInstallMethod = 'copied_prebuilt'
+    return $true
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($SuperplanSourceDir)) {
+    Say 'No packaged Windows overlay artifact found in local source snapshot; continuing without the desktop companion'
+    return $false
+  }
+
+  $downloadPath = Join-Path $WorkDir $script:OverlayArtifactName
+  $downloadUrl = "$($script:SuperplanOverlayReleaseBaseUrl.TrimEnd('/'))/$script:OverlayArtifactName"
+  Say "Downloading Superplan overlay from $downloadUrl"
+
+  try {
+    Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath | Out-Null
+  } catch {
+    Fail "failed to download overlay companion for $script:OverlayPlatform/$script:OverlayArch from $downloadUrl"
+  }
+
+  $script:SuperplanOverlaySourcePath = $downloadPath
+  $script:OverlayInstallMethod = 'downloaded_prebuilt'
+  return $true
+}
+
+function Install-OverlayCompanion {
+  if ([string]::IsNullOrWhiteSpace($SuperplanOverlaySourcePath)) {
+    return
+  }
+
+  if (-not (Test-Path -LiteralPath $SuperplanOverlaySourcePath -PathType Leaf)) {
+    Fail "SUPERPLAN_OVERLAY_SOURCE_PATH does not exist: $SuperplanOverlaySourcePath"
+  }
+
+  New-Item -ItemType Directory -Force -Path $SuperplanOverlayInstallDir | Out-Null
+  $overlayName = Split-Path -Path $SuperplanOverlaySourcePath -Leaf
+  $script:OverlayInstallPath = Join-Path $SuperplanOverlayInstallDir $overlayName
+
+  Remove-Item -LiteralPath $script:OverlayInstallPath -Force -ErrorAction SilentlyContinue
+  Copy-Item -LiteralPath $SuperplanOverlaySourcePath -Destination $script:OverlayInstallPath -Force
+  $script:OverlayExecutablePath = $script:OverlayInstallPath
+}
+
 function Ensure-WritablePrefix {
   if (-not [string]::IsNullOrWhiteSpace($SuperplanInstallPrefix)) {
     $script:env:npm_config_prefix = $SuperplanInstallPrefix
@@ -205,6 +317,8 @@ New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 try {
   Ensure-WritablePrefix
   Resolve-InstallRef
+  Resolve-OverlayRef
+  Resolve-OverlayReleaseBaseUrl
 
   if (-not [string]::IsNullOrWhiteSpace($SuperplanSourceDir)) {
     if (-not (Test-Path -LiteralPath $SuperplanSourceDir -PathType Container)) {
@@ -234,6 +348,12 @@ try {
   $packageJsonPath = Join-Path $sourceWorktree 'package.json'
   if (-not (Test-Path -LiteralPath $packageJsonPath -PathType Leaf)) {
     Fail 'package.json not found in installer worktree'
+  }
+
+  Resolve-OverlayReleaseTarget -SourceWorktree $sourceWorktree
+  if (-not (Resolve-PackagedOverlaySource -SourceWorktree $sourceWorktree -WorkDir $workDir)) {
+    Say "WARNING: Could not find or download the Superplan overlay companion for $script:OverlayPlatform/$script:OverlayArch."
+    Say 'The CLI will be installed without the desktop overlay. You can install it manually later.'
   }
 
   Push-Location $sourceWorktree
@@ -286,6 +406,11 @@ try {
     Fail "superplan binary was not installed to $installBinDir"
   }
 
+  if (-not [string]::IsNullOrWhiteSpace($SuperplanOverlaySourcePath)) {
+    Say 'Installing Superplan overlay companion'
+    Install-OverlayCompanion
+  }
+
   Run-MachineSetup -SuperplanCommandPath $superplanCommandPath
 
   $installStateDir = Join-Path $HOME '.config\superplan'
@@ -313,10 +438,27 @@ try {
     $metadata.source_dir = $SuperplanSourceDir
   }
 
+  if (-not [string]::IsNullOrWhiteSpace($OverlayInstallMethod) -and -not [string]::IsNullOrWhiteSpace($OverlayInstallPath)) {
+    $metadata.overlay = [ordered]@{
+      install_method = $OverlayInstallMethod
+      source_path = if (-not [string]::IsNullOrWhiteSpace($SuperplanOverlaySourcePath)) { $SuperplanOverlaySourcePath } else { $null }
+      asset_name = if (-not [string]::IsNullOrWhiteSpace($OverlayArtifactName)) { $OverlayArtifactName } else { $null }
+      release_base_url = if (-not [string]::IsNullOrWhiteSpace($SuperplanOverlayReleaseBaseUrl)) { $SuperplanOverlayReleaseBaseUrl } else { $null }
+      install_dir = $SuperplanOverlayInstallDir
+      install_path = $OverlayInstallPath
+      executable_path = $OverlayExecutablePath
+      platform = $OverlayPlatform
+      arch = $OverlayArch
+      installed_at = (Get-Date).ToUniversalTime().ToString('o')
+    }
+  }
+
   $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $installStatePath -Encoding utf8
 
   Say "Installed Superplan to $superplanCommandPath"
-  Say 'Windows installer note: the desktop overlay companion is not packaged by this script yet.'
+  if (-not [string]::IsNullOrWhiteSpace($OverlayInstallPath)) {
+    Say "Installed Superplan overlay to $OverlayInstallPath"
+  }
 
   $pathEntries = ($env:PATH -split ';') | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
   $installDirOnPath = $false

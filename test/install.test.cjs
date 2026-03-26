@@ -178,16 +178,18 @@ test('windows installer scripts are packaged and documented', async () => {
   assert.ok(packageJson.files.includes('scripts/install.cmd'));
   assert.match(readme, /install\.ps1 \| iex/);
   assert.match(readme, /install-superplan\.cmd/);
-  assert.match(readme, /Windows installer currently installs the CLI only/i);
+  assert.match(readme, /Windows installer now installs the CLI and the packaged overlay companion/i);
 });
 
-test('windows powershell installer resolves the latest release and records Windows metadata', async () => {
+test('windows powershell installer resolves the latest release and overlay artifact metadata', async () => {
   const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.ps1'), 'utf-8');
 
   assert.match(installerSource, /Resolve-LatestReleaseTagFromGitHub/);
   assert.match(installerSource, /SUPERPLAN_REF/);
   assert.match(installerSource, /platform = 'windows'/);
-  assert.match(installerSource, /Windows installer note: the desktop overlay companion is not packaged by this script yet\./);
+  assert.match(installerSource, /Resolve-OverlayReleaseTarget/);
+  assert.match(installerSource, /Resolved latest Superplan overlay release:/);
+  assert.match(installerSource, /Installed Superplan overlay to/);
 });
 
 test('windows cmd installer delegates to powershell', async () => {

@@ -37,7 +37,7 @@ irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts
 curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
 ```
 
-The Windows installer currently installs the CLI only. Packaged overlay artifacts in this repo currently target macOS and Linux.
+The Windows installer now installs the CLI and the packaged overlay companion when a matching Windows release artifact is available.
 
 ## How it works
 
@@ -126,7 +126,7 @@ For Windows Command Prompt:
 curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
 ```
 
-The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned. It does not install the desktop overlay companion yet.
+The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact is available.
 
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
 

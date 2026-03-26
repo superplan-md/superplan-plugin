@@ -39,6 +39,10 @@ interface RunningProcessEntry {
   command: string;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -112,14 +116,9 @@ function resolveMacosAppBundlePath(
   return null;
 }
 
-function commandMatchesExecutablePath(commandLine: string, executablePath: string): boolean {
-  // Direct path match
-  if (
-    commandLine === executablePath
-    || commandLine.startsWith(`${executablePath} `)
-    || commandLine.includes(` ${executablePath} `)
-    || commandLine.endsWith(` ${executablePath}`)
-  ) {
+export function commandMatchesExecutablePath(commandLine: string, executablePath: string): boolean {
+  const escapedExecutablePath = escapeRegExp(executablePath);
+  if (new RegExp(`(^|\\s)"?${escapedExecutablePath}"?(?=\\s|$)`).test(commandLine)) {
     return true;
   }
 
@@ -138,43 +137,9 @@ function commandMatchesExecutablePath(commandLine: string, executablePath: strin
   );
 }
 
-function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
-  return commandLine.includes(` --workspace ${workspacePath}`)
-    || commandLine.endsWith(`--workspace ${workspacePath}`)
-    || commandLine.includes(` --workspace=${workspacePath}`)
-    || commandLine.endsWith(`--workspace=${workspacePath}`);
-}
-
-async function readProcessCommandLines(): Promise<string[] | null> {
-  return await new Promise(resolve => {
-    const child = spawn('/bin/ps', ['-axo', 'command='], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-
-    let stdout = '';
-
-    child.stdout.on('data', chunk => {
-      stdout += String(chunk);
-    });
-
-    child.on('error', () => {
-      resolve(null);
-    });
-
-    child.on('close', code => {
-      if (code !== 0) {
-        resolve(null);
-        return;
-      }
-
-      resolve(
-        stdout
-          .split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(Boolean),
-      );
-    });
-  });
+export function commandMatchesWorkspacePath(commandLine: string, workspacePath: string): boolean {
+  const escapedWorkspacePath = escapeRegExp(workspacePath);
+  return new RegExp(`(^|\\s)--workspace(?:\\s+|=)"?${escapedWorkspacePath}"?(?=\\s|$)`).test(commandLine);
 }
 
 function parseRunningProcessEntry(line: string): RunningProcessEntry | null {
@@ -189,7 +154,67 @@ function parseRunningProcessEntry(line: string): RunningProcessEntry | null {
   };
 }
 
+export function parseWindowsProcessEntriesPayload(stdout: string): RunningProcessEntry[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  const parsed = JSON.parse(trimmed) as (
+    { ProcessId?: number; CommandLine?: string | null }
+    | Array<{ ProcessId?: number; CommandLine?: string | null }>
+  );
+  const rows = Array.isArray(parsed) ? parsed : [parsed];
+
+  return rows
+    .map(row => {
+      const pid = typeof row.ProcessId === 'number' ? row.ProcessId : null;
+      const command = typeof row.CommandLine === 'string' ? row.CommandLine.trim() : '';
+      if (!pid || !command) {
+        return null;
+      }
+
+      return { pid, command };
+    })
+    .filter((entry): entry is RunningProcessEntry => entry !== null);
+}
+
 async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null> {
+  if (process.platform === 'win32') {
+    return await new Promise(resolve => {
+      const child = spawn('powershell', [
+        '-NoProfile',
+        '-Command',
+        'Get-CimInstance Win32_Process | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress',
+      ], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+
+      let stdout = '';
+
+      child.stdout.on('data', chunk => {
+        stdout += String(chunk);
+      });
+
+      child.on('error', () => {
+        resolve(null);
+      });
+
+      child.on('close', code => {
+        if (code !== 0) {
+          resolve(null);
+          return;
+        }
+
+        try {
+          resolve(parseWindowsProcessEntriesPayload(stdout));
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+  }
+
   return await new Promise(resolve => {
     const child = spawn('/bin/ps', ['-axo', 'pid=,command='], {
       stdio: ['ignore', 'pipe', 'ignore'],

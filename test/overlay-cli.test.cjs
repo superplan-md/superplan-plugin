@@ -71,6 +71,36 @@ test('macOS bundle launch plan opens the app bundle without forcing a new instan
   assert.equal(plan.args.includes('-n'), false);
 });
 
+test('overlay companion matches quoted Windows executable and workspace arguments', () => {
+  const {
+    commandMatchesExecutablePath,
+    commandMatchesWorkspacePath,
+    parseWindowsProcessEntriesPayload,
+  } = loadDistModule('cli/overlay-companion.js');
+
+  assert.equal(
+    commandMatchesExecutablePath(
+      '"C:\\Users\\me\\AppData\\Roaming\\superplan\\overlay\\superplan-overlay-desktop.exe" --workspace "C:\\repo with space"',
+      'C:\\Users\\me\\AppData\\Roaming\\superplan\\overlay\\superplan-overlay-desktop.exe',
+    ),
+    true,
+  );
+  assert.equal(
+    commandMatchesWorkspacePath(
+      '"C:\\Users\\me\\AppData\\Roaming\\superplan\\overlay\\superplan-overlay-desktop.exe" --workspace "C:\\repo with space"',
+      'C:\\repo with space',
+    ),
+    true,
+  );
+  assert.deepEqual(
+    parseWindowsProcessEntriesPayload('[{"ProcessId":42,"CommandLine":"\\"C:\\\\\\\\overlay\\\\\\\\superplan-overlay-desktop.exe\\" --workspace \\"C:\\\\\\\\repo with space\\""}]'),
+    [{
+      pid: 42,
+      command: '"C:\\\\overlay\\\\superplan-overlay-desktop.exe" --workspace "C:\\\\repo with space"',
+    }],
+  );
+});
+
 async function waitForFile(targetPath, timeoutMs = 3000) {
   const startedAt = Date.now();
 
