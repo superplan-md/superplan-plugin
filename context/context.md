@@ -47,7 +47,7 @@ Supported install paths in the current repo are:
 
 Important install note:
 
-- Public quick-start docs pin the installer to `0.1.0` by using both the tagged raw URL and `SUPERPLAN_REF=0.1.0`, because `scripts/install.sh` still defaults `SUPERPLAN_REF` to `dev` when that env var is absent.
+- Public quick-start docs pin the installer to `0.1.0` by using both the tagged raw URL and `SUPERPLAN_REF=0.1.0`, because `scripts/install.sh` otherwise resolves to the current default install ref when that env var is absent.
 - `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later and then refresh existing skill installs.
 - Older installed binaries that predate the `update` command still need one manual rebuild/reinstall before `superplan update` becomes available.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
@@ -177,17 +177,17 @@ Task markdown should not be hand-edited to reflect runtime lifecycle changes, an
 
 Review handoff now works efficiently:
 
-- `superplan task complete <task_id> --json` automatically verifies acceptance criteria and moves the task straight to `done`. If review is strictly required, it routes to `in_review`.
-- `superplan task approve <task_id> --json` is the final review signoff for tasks stuck `in_review`, marking them `done`.
-- `superplan task reopen <task_id> --reason "..."` moves an in-review or done task back to `in_progress`
+- `superplan task review complete <change-slug/T-001> --json` automatically verifies acceptance criteria and moves the task straight to `done`. If review is strictly required, it routes to `in_review`.
+- `superplan task review approve <change-slug/T-001> --json` is the final review signoff for tasks stuck `in_review`, marking them `done`.
+- `superplan task review reopen <change-slug/T-001> --reason "..."` moves an in-review or done task back to `in_progress`
 
 ## Behavioral Notes
 
 - The public product story is centered on planning, task pickup, resumption, and handoff rather than side experiments.
-- `change`, `task new`, and `task batch` are the primary authoring helpers for new tracked work.
+- `change`, `task scaffold new`, and `task scaffold batch` are the primary authoring helpers for new tracked work.
 - Superplan skills should discourage unnecessary CLI exploration. Repo exploration is allowed when useful, but agents should not wander across `--help`, neighboring commands, or repeated `status`, `task show`, and `doctor` calls once the canonical workflow command is already clear.
-- task contracts should not be created through shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs; shell is acceptable only as stdin transport into `task batch --stdin --json`.
-- when overlay support is enabled and a launchable companion is installed, `task new`, `task batch`, `run`, `run <task_id>`, and `task reopen` can reveal the overlay to keep authoring or execution state visible.
+- task contracts should not be created through shell loops or direct file-edit rewrites such as `for`, `sed`, `cat > ...`, `printf > ...`, or here-docs; shell is acceptable only as stdin transport into `task scaffold batch --stdin --json`.
+- when overlay support is enabled and a launchable companion is installed, `task scaffold new`, `task scaffold batch`, `run`, `run <task_id>`, and `task review reopen` can reveal the overlay to keep authoring or execution state visible.
 - `sync` refreshes Superplan's view of the current repo and does not reinstall skills.
 - `update` refreshes the installed CLI plus any existing global or repo-local skill installs; local source checkouts should still be updated from the checkout and reinstalled explicitly.
 - `task --help` is intentionally narrower than the full internal task command surface. It emphasizes the common execution loop rather than every diagnostic subcommand.
