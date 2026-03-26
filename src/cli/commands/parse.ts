@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { loadChangeGraph } from '../graph';
 import { getLocalTaskId, toQualifiedTaskId } from '../task-identity';
+import { parseTaskRecipeSections, type TaskRecipeConfig } from '../task-execution';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
 
@@ -25,6 +26,7 @@ export interface ParsedTask {
   change_id?: string;
   task_ref?: string;
   task_file_path?: string;
+  title: string;
   status: string;
   priority: 'high' | 'medium' | 'low';
   depends_on_all: string[];
@@ -35,6 +37,7 @@ export interface ParsedTask {
   completed_acceptance_criteria: number;
   progress_percent: number;
   effective_status: 'draft' | 'in_progress' | 'done';
+  task_recipe: TaskRecipeConfig;
   is_valid: boolean;
   is_ready: boolean;
   issues: string[];
@@ -87,6 +90,7 @@ function parseIndentedStringList(lines: string[], startIndex: number): { values:
 
 function parseFrontmatter(lines: string[]): {
   task_id: string;
+  title: string;
   status: string;
   priority: 'high' | 'medium' | 'low';
   depends_on_all: string[];
@@ -94,6 +98,7 @@ function parseFrontmatter(lines: string[]): {
   contentStartIndex: number;
 } {
   let taskId = '';
+  let title = '';
   let status = '';
   let priority: 'high' | 'medium' | 'low' = 'medium';
   let dependsOnAll: string[] = [];
@@ -102,6 +107,7 @@ function parseFrontmatter(lines: string[]): {
   if (lines[0] !== '---') {
     return {
       task_id: taskId,
+      title,
       status,
       priority,
       depends_on_all: dependsOnAll,
@@ -121,6 +127,8 @@ function parseFrontmatter(lines: string[]): {
 
       if (key === 'task_id') {
         taskId = value;
+      } else if (key === 'title') {
+        title = value;
       } else if (key === 'status') {
         status = value;
       } else if (key === 'priority') {
@@ -151,6 +159,7 @@ function parseFrontmatter(lines: string[]): {
 
   return {
     task_id: taskId,
+    title,
     status,
     priority,
     depends_on_all: dependsOnAll,
@@ -286,6 +295,7 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
   const sections = parseSections(lines.slice(frontmatter.contentStartIndex));
   const description = normalizeSectionText(sections.Description);
   const acceptanceCriteria = parseAcceptanceCriteria(sections['Acceptance Criteria']);
+  const taskRecipe = parseTaskRecipeSections(sections);
   const totalAcceptanceCriteria = acceptanceCriteria.length;
   const completedAcceptanceCriteria = acceptanceCriteria.filter(criterion => criterion.done).length;
   const progressPercent = totalAcceptanceCriteria === 0
@@ -303,6 +313,7 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
     change_id: changeId,
     task_ref: qualifiedTaskId,
     task_file_path: path.resolve(process.cwd(), filePath),
+    title: frontmatter.title || localTaskId,
     status: frontmatter.status,
     priority: frontmatter.priority,
     depends_on_all: frontmatter.depends_on_all.map(getLocalTaskId),
@@ -313,6 +324,7 @@ function buildTask(lines: string[], filePath: string): { task: ParsedTask; diagn
     completed_acceptance_criteria: completedAcceptanceCriteria,
     progress_percent: progressPercent,
     effective_status: computeEffectiveStatus(acceptanceCriteria),
+    task_recipe: taskRecipe,
     is_valid: true,
     is_ready: false,
     issues: [],

@@ -125,6 +125,10 @@ test('change new can scaffold a single-task change in one invocation', async () 
   assert.match(taskContent, /task_id: T-001/);
   assert.match(taskContent, /title: Add status counts/);
   assert.match(taskContent, /priority: high/);
+  assert.match(taskContent, /## Execution/);
+  assert.match(taskContent, /Use bullets like `- run: npm start`\./);
+  assert.match(taskContent, /## Verification/);
+  assert.match(taskContent, /Use bullets like `- verify: npm test` and `- evidence: capture the failing command output`\./);
 });
 
 test('task scaffold new scaffolds a contract for a graph-declared task id without mutating tasks.md', async () => {

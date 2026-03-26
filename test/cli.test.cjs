@@ -109,7 +109,7 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.match(result.stdout, /Review:/);
   assert.match(result.stdout, /Runtime:/);
   assert.match(result.stdout, /Repair:/);
-  assert.match(result.stdout, /inspect show <task_id>\s+Show one task and its readiness details/);
+  assert.match(result.stdout, /inspect show <task_id>\s+Show one task, its readiness details, and its execution recipe/);
   assert.match(result.stdout, /scaffold new <change-slug>\s+Scaffold one graph-declared task contract/);
   assert.match(result.stdout, /scaffold batch <change-slug> --stdin\s+Scaffold multiple graph-declared task contracts from JSON stdin/);
   assert.match(result.stdout, /review complete <task_id>\s+Finish implementation and mark the task done when acceptance criteria pass/);
@@ -118,6 +118,8 @@ test('task --help explains task subcommands explicitly', async () => {
   assert.match(result.stdout, /runtime block <task_id> --reason\s+Pause a task because something external is blocking it/);
   assert.match(result.stdout, /For a fast start:\s+superplan run --json/);
   assert.match(result.stdout, /shape changes\/<slug>\/tasks\.md first, validate it, then scaffold task contracts from graph-declared ids/i);
+  assert.match(result.stdout, /## Execution/);
+  assert.match(result.stdout, /## Verification/);
   assert.doesNotMatch(result.stdout, /\bstart <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bresume <task_id>\b/);
   assert.doesNotMatch(result.stdout, /\bcurrent\b/);

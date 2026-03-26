@@ -131,6 +131,14 @@ export function buildTaskContract(options: {
     '## Acceptance Criteria',
     ...normalizedAcceptanceCriteria.map(criterion => `- [ ] ${criterion}`),
     '',
+    '## Execution',
+    'Add task-specific repo-native commands here when this task needs an explicit launch or setup path.',
+    'Use bullets like `- run: npm start`.',
+    '',
+    '## Verification',
+    'Add the smallest proof commands and reviewer evidence here when this task needs tighter checks than the repo defaults.',
+    'Use bullets like `- verify: npm test` and `- evidence: capture the failing command output`.',
+    '',
   ].join('\n');
 }
 

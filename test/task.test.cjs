@@ -180,6 +180,103 @@ Start from nested cwd
   assert.equal(await pathExists(path.join(nestedCwd, '.superplan')), false);
 });
 
+test('task inspect show surfaces authored execution and verification recipes', async () => {
+  const sandbox = await makeSandbox('superplan-task-authored-recipe-');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-175', title: 'Add recipe guidance' },
+    ],
+  });
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-175.md'), `---
+task_id: T-175
+title: Add recipe guidance
+status: pending
+priority: high
+---
+
+## Description
+Add recipe guidance
+
+## Acceptance Criteria
+- [ ] A
+
+## Execution
+- run: npm start
+- note: Requires the built CLI output
+
+## Verification
+- verify: npm run build
+- verify: npm test
+- evidence: Capture the command output in the task notes
+`);
+
+  const showPayload = parseCliJson(await runCli(['task', 'inspect', 'show', 'demo/T-175', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(showPayload.ok, true);
+  assert.equal(showPayload.data.task.title, 'Add recipe guidance');
+  assert.equal(showPayload.data.recipe.source, 'task');
+  assert.deepEqual(showPayload.data.recipe.run_commands, ['npm start']);
+  assert.deepEqual(showPayload.data.recipe.verify_commands, ['npm run build', 'npm test']);
+  assert.deepEqual(showPayload.data.recipe.evidence, ['Capture the command output in the task notes']);
+  assert.deepEqual(showPayload.data.recipe.notes, ['Requires the built CLI output']);
+});
+
+test('task inspect show infers repo-native verification commands when the task does not declare them', async () => {
+  const sandbox = await makeSandbox('superplan-task-inferred-recipe-');
+
+  await writeJson(path.join(sandbox.cwd, 'package.json'), {
+    name: 'demo',
+    scripts: {
+      build: 'tsc',
+      test: 'node --test test/*.test.cjs',
+      start: 'node dist/cli/main.js',
+      'overlay:bundle': 'echo overlay',
+    },
+  });
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-176', title: 'Improve overlay verification' },
+    ],
+  });
+
+  await writeFile(path.join(sandbox.cwd, '.superplan', 'changes', 'demo', 'tasks', 'T-176.md'), `---
+task_id: T-176
+title: Improve overlay verification
+status: pending
+priority: high
+---
+
+## Description
+Improve overlay verification for the CLI.
+
+## Acceptance Criteria
+- [ ] Add overlay checks
+`);
+
+  const showPayload = parseCliJson(await runCli(['task', 'inspect', 'show', 'demo/T-176', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+
+  assert.equal(showPayload.ok, true);
+  assert.equal(showPayload.data.recipe.source, 'repo_inferred');
+  assert.deepEqual(showPayload.data.recipe.run_commands, []);
+  assert.deepEqual(showPayload.data.recipe.verify_commands, [
+    'npm run overlay:bundle',
+    'npm run build',
+    'npm test',
+  ]);
+  assert.equal(showPayload.data.recipe.notes.some(note => note.includes('override these repo-default commands')), true);
+});
+
 test('task lifecycle supports block, explicit run resume, request-feedback, and reset while appending runtime events', async () => {
   const sandbox = await makeSandbox('superplan-task-lifecycle-');
 

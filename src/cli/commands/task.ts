@@ -10,6 +10,11 @@ import {
 import { parse } from './parse';
 import { refreshOverlaySnapshot } from '../overlay-runtime';
 import {
+  resolveTaskRecipe,
+  type ResolvedTaskRecipe,
+  type TaskRecipeConfig,
+} from '../task-execution';
+import {
   applyRequestedOverlayAction,
   createOverlayRuntimeNotice,
   type OverlayRuntimeNotice,
@@ -44,6 +49,7 @@ export interface ParsedTask {
   change_id?: string;
   task_ref?: string;
   task_file_path?: string;
+  title: string;
   status: string;
   priority: 'high' | 'medium' | 'low';
   depends_on_all: string[];
@@ -54,6 +60,7 @@ export interface ParsedTask {
   completed_acceptance_criteria: number;
   progress_percent: number;
   effective_status: 'draft' | 'in_progress' | 'in_review' | 'done' | 'blocked' | 'needs_feedback';
+  task_recipe: TaskRecipeConfig;
   is_valid: boolean;
   is_ready: boolean;
   issues: string[];
@@ -129,6 +136,7 @@ interface TaskCommandSuccessData {
   task?: ParsedTask | null;
   tasks?: ParsedTask[];
   created?: TaskBatchCreatedTask[];
+  recipe?: ResolvedTaskRecipe;
   task_id?: string | null;
   change_id?: string;
   path?: string;
@@ -450,7 +458,7 @@ export function getTaskCommandHelpMessage(options: {
     '  after verification passes, do not leave the task sitting in pending or in_progress without an explicit blocker.',
     '',
     'Inspect:',
-    '  inspect show <task_id>                Show one task and its readiness details',
+    '  inspect show <task_id>                Show one task, its readiness details, and its execution recipe',
     '',
     'Scaffold:',
     '  scaffold new <change-slug>            Scaffold one graph-declared task contract',
@@ -472,6 +480,7 @@ export function getTaskCommandHelpMessage(options: {
     'For a fast start: superplan run --json',
     'To run a specific task: superplan run <task_id> --json',
     'For tracked authoring: shape changes/<slug>/tasks.md first, validate it, then scaffold task contracts from graph-declared ids.',
+    'Task contracts can optionally include `## Execution` bullets like `- run: npm start` and `## Verification` bullets like `- verify: npm test`.',
     '',
     'Examples:',
     '  superplan task inspect show improve-task-authoring/T-001 --json',
@@ -1351,12 +1360,14 @@ async function showTask(taskId: string): Promise<TaskCommandResult> {
   }
 
   const reasons = buildTaskReasons(matchedTask, mergedTasksResult.tasks!, mergedTasksResult.runtimeState!);
+  const recipe = await resolveTaskRecipe(matchedTask);
 
   return {
     ok: true,
     data: {
       task: matchedTask,
       reasons,
+      recipe,
     },
   };
 }
