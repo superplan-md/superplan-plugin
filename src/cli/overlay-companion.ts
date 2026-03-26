@@ -41,6 +41,9 @@ interface RunningProcessEntry {
   command: string;
 }
 
+const LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS = 60_000;
+const LAUNCH_RESULT_WAIT_MS = process.platform === 'linux' ? 300 : 50;
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
