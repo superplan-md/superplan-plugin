@@ -93,6 +93,17 @@ async function installOverlayCompanion(globalConfigDir: string): Promise<void> {
         targetBundleName = 'superplan-overlay.AppImage';
       }
     }
+  } else if (platform === 'win32') {
+    sourceBundlePath = path.join(
+      repoRoot,
+      'apps',
+      'overlay-desktop',
+      'src-tauri',
+      'target',
+      'release',
+      'superplan-overlay-desktop.exe',
+    );
+    targetBundleName = 'superplan-overlay-desktop.exe';
   }
 
   if (sourceBundlePath && await pathExists(sourceBundlePath)) {
