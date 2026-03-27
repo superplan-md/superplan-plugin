@@ -8,7 +8,7 @@ $SuperplanOverlaySourcePath = if ($env:SUPERPLAN_OVERLAY_SOURCE_PATH) { $env:SUP
 $SuperplanOverlayReleaseBaseUrl = if ($env:SUPERPLAN_OVERLAY_RELEASE_BASE_URL) { $env:SUPERPLAN_OVERLAY_RELEASE_BASE_URL } else { '' }
 $SuperplanOverlayInstallDir = if ($env:SUPERPLAN_OVERLAY_INSTALL_DIR) { $env:SUPERPLAN_OVERLAY_INSTALL_DIR } else { (Join-Path $HOME '.config\superplan\overlay') }
 $SuperplanEnableOverlay = if ($env:SUPERPLAN_ENABLE_OVERLAY) { $env:SUPERPLAN_ENABLE_OVERLAY } else { '1' }
-$SuperplanRunSetupAfterInstall = if ($env:SUPERPLAN_RUN_SETUP_AFTER_INSTALL) { $env:SUPERPLAN_RUN_SETUP_AFTER_INSTALL } else { '1' }
+$SuperplanRunSetupAfterInstall = if ($null -ne $env:SUPERPLAN_RUN_SETUP_AFTER_INSTALL) { $env:SUPERPLAN_RUN_SETUP_AFTER_INSTALL } else { $null }
 $SuperplanResolvedRef = ''
 $SuperplanOverlayRef = ''
 $OverlayInstallMethod = ''
@@ -17,6 +17,8 @@ $OverlayExecutablePath = ''
 $OverlayArtifactName = ''
 $OverlayPlatform = ''
 $OverlayArch = ''
+$SetupCompleted = $false
+$OriginalLocation = Get-Location
 
 function Say {
   param([string] $Message)
@@ -40,6 +42,36 @@ function To-Lower {
   param([string] $Value)
 
   return $Value.ToLowerInvariant()
+}
+
+function Show-InstallSuccess {
+  if ($Host.UI.RawUI) {
+    Write-Host 'Installation successful.' -ForegroundColor Green
+    return
+  }
+
+  Say 'Installation successful.'
+}
+
+function Invoke-QuietCommand {
+  param(
+    [string] $Label,
+    [scriptblock] $Command
+  )
+
+  $logPath = Join-Path $workDir "$Label.log"
+
+  try {
+    & $Command *> $logPath
+    if ($LASTEXITCODE -ne 0) {
+      if (Test-Path -LiteralPath $logPath) {
+        Get-Content -Path $logPath
+      }
+      Fail "$Label failed"
+    }
+  } finally {
+    Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
+  }
 }
 
 function Test-DirectoryWritable {
@@ -291,15 +323,30 @@ function Ensure-WritablePrefix {
 function Run-MachineSetup {
   param([string] $SuperplanCommandPath)
 
-  if ($SuperplanRunSetupAfterInstall -ne '1') {
+  $shouldRunSetup = $false
+
+  if ($null -ne $SuperplanRunSetupAfterInstall) {
+    $shouldRunSetup = (To-Lower ([string] $SuperplanRunSetupAfterInstall)) -in @('1', 'y', 'yes', 'true', 'on')
+  } elseif ($Host.Name -notin @('ServerRemoteHost', 'ServerHost')) {
+    $answer = Read-Host "Run `superplan init` in $OriginalLocation now? [Y/n]"
+    $shouldRunSetup = [string]::IsNullOrWhiteSpace($answer) -or (To-Lower $answer) -in @('y', 'yes')
+  }
+
+  if (-not $shouldRunSetup) {
     return
   }
 
-  Say 'Configuring Superplan on this machine'
-  & $SuperplanCommandPath init --yes --json | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    Fail 'machine install failed after binary installation'
+  Say "Running superplan init in $OriginalLocation"
+  Push-Location $OriginalLocation
+  try {
+    & $SuperplanCommandPath init --yes --json | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+      Fail 'superplan init failed after binary installation'
+    }
+  } finally {
+    Pop-Location
   }
+  $script:SetupCompleted = $true
 }
 
 Require-Command node
@@ -360,19 +407,13 @@ try {
   try {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceWorktree 'node_modules') -PathType Container)) {
       Say 'Installing dependencies'
-      & npm install | Out-Null
-      if ($LASTEXITCODE -ne 0) {
-        Fail 'npm install failed'
-      }
+      Invoke-QuietCommand -Label 'npm-install' -Command { npm install }
     } else {
       Say 'Using existing node_modules from source snapshot'
     }
 
     Say 'Building Superplan'
-    & npm run build | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      Fail 'npm run build failed'
-    }
+    Invoke-QuietCommand -Label 'npm-build' -Command { npm run build }
 
     if (-not [string]::IsNullOrWhiteSpace($SuperplanSourceDir)) {
       Say 'Packing Superplan from local source snapshot'
@@ -380,16 +421,24 @@ try {
       Say 'Packing Superplan'
     }
 
-    $packageTgz = (& npm pack).Trim().Split([Environment]::NewLine, [System.StringSplitOptions]::RemoveEmptyEntries)[-1]
+    $packLogPath = Join-Path $workDir 'npm-pack.log'
+    try {
+      $packageTgz = (& npm pack --silent 2>$packLogPath).Trim().Split([Environment]::NewLine, [System.StringSplitOptions]::RemoveEmptyEntries)[-1]
+      if ($LASTEXITCODE -ne 0) {
+        if (Test-Path -LiteralPath $packLogPath) {
+          Get-Content -Path $packLogPath
+        }
+        Fail 'npm pack failed'
+      }
+    } finally {
+      Remove-Item -LiteralPath $packLogPath -Force -ErrorAction SilentlyContinue
+    }
     if ([string]::IsNullOrWhiteSpace($packageTgz)) {
       Fail 'npm pack did not return an archive path'
     }
 
     Say 'Installing Superplan globally with npm'
-    & npm install --global (Join-Path $sourceWorktree $packageTgz) | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      Fail 'global npm install failed'
-    }
+    Invoke-QuietCommand -Label 'npm-global-install' -Command { npm install --global (Join-Path $sourceWorktree $packageTgz) }
   } finally {
     Pop-Location
   }
@@ -427,7 +476,7 @@ try {
     install_bin = $installBinDir
     installed_at = (Get-Date).ToUniversalTime().ToString('o')
     platform = 'windows'
-    setup_completed = ($SuperplanRunSetupAfterInstall -eq '1')
+    setup_completed = $SetupCompleted
   }
 
   if (-not [string]::IsNullOrWhiteSpace($SuperplanInstallPrefix)) {
@@ -475,8 +524,14 @@ try {
     Say 'Add it through Windows Environment Variables, then open a new shell.'
   }
 
+  if ($SetupCompleted) {
+    Say "Superplan setup completed in $OriginalLocation"
+  } else {
+    Show-InstallSuccess
+    Say 'Please cd into your favorite repo and run: superplan init'
+  }
+
   Say 'Run: superplan --version'
-  Say 'Then run: superplan init inside a repository to start using Superplan'
 } finally {
   Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue
 }

@@ -18,7 +18,7 @@ set -eu
 # - SUPERPLAN_OVERLAY_RELEASE_BASE_URL: base URL that hosts packaged overlay artifacts
 # - SUPERPLAN_OVERLAY_INSTALL_DIR: install directory for the overlay bundle or executable
 # - SUPERPLAN_ENABLE_OVERLAY: yes/no override for machine-default overlay behavior
-# - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run machine init after install, 0 to skip it
+# - SUPERPLAN_RUN_SETUP_AFTER_INSTALL: 1 to run `superplan init` in the launch directory, 0 to skip it
 
 SUPERPLAN_REPO_URL="${SUPERPLAN_REPO_URL:-https://github.com/superplan-md/superplan-plugin.git}"
 SUPERPLAN_REF="${SUPERPLAN_REF:-}"
@@ -28,9 +28,10 @@ SUPERPLAN_OVERLAY_SOURCE_PATH="${SUPERPLAN_OVERLAY_SOURCE_PATH:-}"
 SUPERPLAN_OVERLAY_RELEASE_BASE_URL="${SUPERPLAN_OVERLAY_RELEASE_BASE_URL:-}"
 SUPERPLAN_OVERLAY_INSTALL_DIR="${SUPERPLAN_OVERLAY_INSTALL_DIR:-${HOME}/.local/share/superplan/overlay}"
 SUPERPLAN_ENABLE_OVERLAY="${SUPERPLAN_ENABLE_OVERLAY:-1}"
-SUPERPLAN_RUN_SETUP_AFTER_INSTALL="${SUPERPLAN_RUN_SETUP_AFTER_INSTALL:-1}"
+SUPERPLAN_RUN_SETUP_AFTER_INSTALL="${SUPERPLAN_RUN_SETUP_AFTER_INSTALL-}"
 SUPERPLAN_RESOLVED_REF=""
 SUPERPLAN_OVERLAY_REF=""
+SETUP_COMPLETED="0"
 
 OVERLAY_INSTALL_METHOD=""
 OVERLAY_INSTALL_PATH=""
@@ -64,6 +65,7 @@ require_command mktemp
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/superplan-install-XXXXXX")"
 SOURCE_WORKTREE="$WORK_DIR/source"
 DOWNLOADED_OVERLAY_PATH=""
+ORIGINAL_CWD="$(pwd)"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -73,6 +75,27 @@ trap cleanup EXIT INT TERM
 
 to_lower() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+print_install_success() {
+  if [ -t 1 ]; then
+    printf '\033[32mInstallation successful.\033[0m\n'
+  else
+    say "Installation successful."
+  fi
+}
+
+run_quiet_command() {
+  label="$1"
+  shift
+  log_path="$WORK_DIR/${label}.log"
+  if "$@" >"$log_path" 2>&1; then
+    rm -f "$log_path"
+    return 0
+  fi
+
+  cat "$log_path" >&2
+  fail "$label failed"
 }
 
 copy_local_source_snapshot() {
@@ -455,14 +478,45 @@ prompt_overlay_enabled_by_default() {
   esac
 }
 
-run_machine_setup() {
-  if [ "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" != "1" ]; then
-    return 0
+prompt_run_setup_after_install() {
+  if [ -n "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" ]; then
+    case "$(to_lower "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL")" in
+      1|y|yes|true|on)
+        return 0
+        ;;
+      0|n|no|false|off)
+        return 1
+        ;;
+    esac
   fi
 
-  say "Configuring Superplan on this machine"
-  "$INSTALL_BIN_DIR/superplan" init --yes --json > /dev/null \
-    || fail "machine install failed after binary installation"
+  if [ -r /dev/tty ]; then
+    printf 'Run `superplan init` in %s now? [Y/n] ' "$ORIGINAL_CWD" > /dev/tty
+    IFS= read -r answer < /dev/tty || answer=""
+    case "$(to_lower "$answer")" in
+      ""|y|yes)
+        return 0
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  fi
+
+  return 1
+}
+
+run_machine_setup() {
+  if ! prompt_run_setup_after_install; then
+    return 1
+  fi
+
+  say "Running superplan init in $ORIGINAL_CWD"
+  (
+    cd "$ORIGINAL_CWD"
+    "$INSTALL_BIN_DIR/superplan" init --yes --json > /dev/null
+  ) || fail "superplan init failed after binary installation"
+  SETUP_COMPLETED="1"
 
   # Bug H1 fix: only enable the overlay preference when the overlay was actually
   # installed. Previously this ran unconditionally, which wrote
@@ -481,6 +535,8 @@ run_machine_setup() {
   else
     say "Overlay not installed; skipping overlay preference setup"
   fi
+
+  return 0
 }
 
 if [ -n "$SUPERPLAN_INSTALL_PREFIX" ]; then
@@ -539,13 +595,13 @@ cd "$SOURCE_WORKTREE"
 
 if [ ! -d node_modules ]; then
   say "Installing dependencies"
-  npm install >/dev/null
+  run_quiet_command npm-install npm install
 else
   say "Using existing node_modules from source snapshot"
 fi
 
 say "Building Superplan"
-npm run build >/dev/null
+run_quiet_command npm-build npm run build
 
 INSTALL_PREFIX="$(npm prefix --global)"
 INSTALL_BIN_DIR="$INSTALL_PREFIX/bin"
@@ -555,10 +611,15 @@ if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
 else
   say "Packing Superplan"
 fi
-PACKAGE_TGZ="$(npm pack)"
+PACK_LOG_PATH="$WORK_DIR/npm-pack.log"
+PACKAGE_TGZ="$(npm pack --silent 2>"$PACK_LOG_PATH")" || {
+  cat "$PACK_LOG_PATH" >&2
+  fail "npm-pack failed"
+}
+rm -f "$PACK_LOG_PATH"
 
 say "Installing Superplan globally with npm"
-npm install --global "$SOURCE_WORKTREE/$PACKAGE_TGZ" >/dev/null
+run_quiet_command npm-global-install npm install --global "$SOURCE_WORKTREE/$PACKAGE_TGZ"
 
 if [ -n "$SUPERPLAN_OVERLAY_SOURCE_PATH" ]; then
   say "Installing Superplan overlay companion"
@@ -569,7 +630,7 @@ if [ ! -x "$INSTALL_BIN_DIR/superplan" ]; then
   fail "superplan binary was not installed to $INSTALL_BIN_DIR"
 fi
 
-run_machine_setup
+run_machine_setup || true
 
 INSTALL_STATE_DIR="${HOME}/.config/superplan"
 INSTALL_STATE_PATH="$INSTALL_STATE_DIR/install.json"
@@ -580,7 +641,7 @@ if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
 fi
 
 mkdir -p "$INSTALL_STATE_DIR"
-node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_RESOLVED_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$OVERLAY_EXECUTABLE_RELATIVE_PATH" "$OVERLAY_ARTIFACT_NAME" "$OVERLAY_PLATFORM" "$OVERLAY_ARCH" "$SUPERPLAN_RUN_SETUP_AFTER_INSTALL" <<'EOF'
+node - "$INSTALL_STATE_PATH" "$INSTALL_METHOD" "$SUPERPLAN_REPO_URL" "$SUPERPLAN_RESOLVED_REF" "$SUPERPLAN_INSTALL_PREFIX" "$INSTALL_PREFIX" "$INSTALL_BIN_DIR" "$SUPERPLAN_SOURCE_DIR" "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$SUPERPLAN_OVERLAY_RELEASE_BASE_URL" "$SUPERPLAN_OVERLAY_INSTALL_DIR" "$OVERLAY_INSTALL_METHOD" "$OVERLAY_INSTALL_PATH" "$OVERLAY_EXECUTABLE_PATH" "$OVERLAY_EXECUTABLE_RELATIVE_PATH" "$OVERLAY_ARTIFACT_NAME" "$OVERLAY_PLATFORM" "$OVERLAY_ARCH" "$SETUP_COMPLETED" <<'EOF'
 const fs = require('node:fs');
 
 const [
@@ -602,7 +663,7 @@ const [
   overlayAssetName,
   overlayPlatform,
   overlayArch,
-  runSetupAfterInstall,
+  setupCompleted,
 ] = process.argv.slice(2);
 
 const metadata = {
@@ -639,8 +700,8 @@ if (overlayInstallMethod && overlayInstallPath) {
   };
 }
 
-if (runSetupAfterInstall) {
-  metadata.setup_completed = runSetupAfterInstall === '1';
+if (setupCompleted) {
+  metadata.setup_completed = setupCompleted === '1';
 }
 
 fs.writeFileSync(installStatePath, JSON.stringify(metadata, null, 2));
@@ -667,5 +728,10 @@ case ":$PATH:" in
     ;;
 esac
 
+if [ "$SETUP_COMPLETED" = "1" ]; then
+  say "Superplan setup completed in $ORIGINAL_CWD"
+else
+  print_install_success
+  say "Please cd into your favorite repo and run: superplan init"
+fi
 say "Run: superplan --version"
-say "Then run: superplan init inside a repository to start using Superplan"

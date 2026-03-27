@@ -72,11 +72,13 @@ test('install script installs superplan from a local source snapshot into a cust
       SUPERPLAN_SOURCE_DIR: REPO_ROOT,
       SUPERPLAN_INSTALL_PREFIX: prefixDir,
       SUPERPLAN_ENABLE_OVERLAY: '0',
+      SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '1',
     },
   });
 
   assert.equal(installResult.code, 0, `install.sh failed with code ${installResult.code}\nSTDOUT: ${installResult.stdout}\nSTDERR: ${installResult.stderr}`);
   assert.match(installResult.stdout, /Installed Superplan to/);
+  assert.doesNotMatch(installResult.stdout, /npm notice/i);
 
   const installMetadata = JSON.parse(await fs.readFile(
     path.join(sandbox.home, '.config', 'superplan', 'install.json'),
@@ -121,6 +123,7 @@ test('install script records and installs a bundled overlay companion when one i
       SUPERPLAN_INSTALL_PREFIX: prefixDir,
       SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath,
       SUPERPLAN_ENABLE_OVERLAY: '1',
+      SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '1',
     },
   });
 
@@ -142,6 +145,37 @@ test('install script records and installs a bundled overlay companion when one i
     await fs.readFile(path.join(sandbox.home, '.config', 'superplan', 'config.toml'), 'utf-8'),
     /\[overlay\][\s\S]*enabled = true/,
   );
+});
+
+test('install script skips setup cleanly when requested and ends with a clear next step', async () => {
+  const sandbox = await makeSandbox('superplan-install-no-setup-');
+  const prefixDir = path.join(sandbox.root, 'prefix');
+
+  await fs.mkdir(prefixDir, { recursive: true });
+
+  const installResult = await runCommand('sh', [path.join(REPO_ROOT, 'scripts', 'install.sh')], {
+    cwd: sandbox.cwd,
+    env: {
+      ...process.env,
+      HOME: sandbox.home,
+      SUPERPLAN_SOURCE_DIR: REPO_ROOT,
+      SUPERPLAN_INSTALL_PREFIX: prefixDir,
+      SUPERPLAN_ENABLE_OVERLAY: '0',
+      SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '0',
+    },
+  });
+
+  assert.equal(installResult.code, 0, installResult.stderr || installResult.stdout);
+  assert.match(installResult.stdout, /Installation successful\./);
+  assert.match(installResult.stdout, /Please cd into your favorite repo and run: superplan init/);
+  assert.doesNotMatch(installResult.stdout, /npm notice/i);
+  assert.equal(await fs.stat(path.join(sandbox.home, '.config', 'superplan', 'config.toml')).then(() => true, () => false), false);
+
+  const installMetadata = JSON.parse(await fs.readFile(
+    path.join(sandbox.home, '.config', 'superplan', 'install.json'),
+    'utf-8',
+  ));
+  assert.equal(installMetadata.setup_completed, false);
 });
 
 test('install script defaults bundled overlay installs to enabled', async () => {
@@ -190,6 +224,8 @@ test('windows powershell installer resolves the latest release and overlay artif
   assert.match(installerSource, /Resolve-OverlayReleaseTarget/);
   assert.match(installerSource, /Resolved latest Superplan overlay release:/);
   assert.match(installerSource, /Installed Superplan overlay to/);
+  assert.match(installerSource, /Run `superplan init` in/);
+  assert.match(installerSource, /Installation successful\./);
 });
 
 test('windows cmd installer delegates to powershell', async () => {
@@ -215,6 +251,7 @@ test('install script stops a running installed overlay before replacing it', asy
     SUPERPLAN_INSTALL_PREFIX: prefixDir,
     SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath,
     SUPERPLAN_ENABLE_OVERLAY: '0',
+    SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '0',
   };
 
   const firstInstall = await runCommand('sh', [path.join(REPO_ROOT, 'scripts', 'install.sh')], {
