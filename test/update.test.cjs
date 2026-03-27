@@ -187,8 +187,8 @@ test('update resolves and installs the latest published release before refreshin
   });
 });
 
-test('update fails cleanly when latest release resolution fails', async () => {
-  const sandbox = await makeSandbox('superplan-update-latest-release-fails-');
+test('update fails cleanly when latest commit resolution fails', async () => {
+  const sandbox = await makeSandbox('superplan-update-latest-commit-fails-');
 
   await withSandboxEnv(sandbox, async () => {
     const { update } = loadDistModule('cli/commands/update.js');
@@ -199,7 +199,7 @@ test('update fails cleanly when latest release resolution fails', async () => {
         repo_url: 'https://github.com/example/custom-superplan.git',
       }),
       resolveLatestRelease: async () => {
-        throw new Error('GitHub latest release lookup failed');
+        throw new Error('GitHub latest commit lookup failed');
       },
       runInstaller: async () => {
         throw new Error('installer should not run');
@@ -209,8 +209,8 @@ test('update fails cleanly when latest release resolution fails', async () => {
     assert.deepEqual(result, {
       ok: false,
       error: {
-        code: 'LATEST_RELEASE_LOOKUP_FAILED',
-        message: 'GitHub latest release lookup failed',
+        code: 'LATEST_COMMIT_LOOKUP_FAILED',
+        message: 'GitHub latest commit lookup failed',
         retryable: true,
       },
     });

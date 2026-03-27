@@ -7,7 +7,7 @@ import { refreshInstalledSkills, type RefreshInstalledSkillsResult } from './ins
 import { commandNextAction, type NextAction } from '../next-action';
 
 const DEFAULT_REPO_URL = 'https://github.com/superplan-md/superplan-plugin.git';
-const DEFAULT_REF = 'dev';
+const DEFAULT_REF = 'main';
 
 interface UpdateOptions {
   json?: boolean;
@@ -139,13 +139,13 @@ function parseGitHubRepo(repoUrl: string): { owner: string; repo: string } | nul
   }
 }
 
-async function resolveLatestReleaseFromGitHub(repoUrl: string): Promise<LatestReleaseInfo> {
+async function resolveLatestCommitFromGitHub(repoUrl: string, branch: string): Promise<LatestReleaseInfo> {
   const parsedRepo = parseGitHubRepo(repoUrl);
   if (!parsedRepo) {
-    throw new Error(`Latest release lookup only supports GitHub repo URLs: ${repoUrl}`);
+    throw new Error(`Latest commit lookup only supports GitHub repo URLs: ${repoUrl}`);
   }
 
-  const requestPath = `/repos/${parsedRepo.owner}/${parsedRepo.repo}/releases/latest`;
+  const requestPath = `/repos/${parsedRepo.owner}/${parsedRepo.repo}/commits/${branch}`;
 
   const payload = await new Promise<string>((resolve, reject) => {
     const request = https.get({
@@ -163,7 +163,7 @@ async function resolveLatestReleaseFromGitHub(repoUrl: string): Promise<LatestRe
       });
       response.on('end', () => {
         if ((response.statusCode ?? 500) >= 400) {
-          reject(new Error(`GitHub latest release lookup failed with status ${response.statusCode}`));
+          reject(new Error(`GitHub latest commit lookup failed with status ${response.statusCode}`));
           return;
         }
         resolve(body);
@@ -174,20 +174,18 @@ async function resolveLatestReleaseFromGitHub(repoUrl: string): Promise<LatestRe
   });
 
   const parsed = JSON.parse(payload) as {
-    tag_name?: string;
-    target_commitish?: string;
+    sha?: string;
     html_url?: string;
   };
-  const tag = parsed.tag_name?.trim();
-  const commitish = parsed.target_commitish?.trim();
+  const commitish = parsed.sha?.trim();
   const url = parsed.html_url?.trim();
 
-  if (!tag || !commitish || !url) {
-    throw new Error('GitHub latest release response was missing tag_name, target_commitish, or html_url');
+  if (!commitish || !url) {
+    throw new Error('GitHub latest commit response was missing sha or html_url');
   }
 
   return {
-    tag,
+    tag: branch,
     commitish,
     url,
   };
@@ -403,7 +401,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const repoUrl = process.env.SUPERPLAN_REPO_URL || installMetadata?.repo_url || DEFAULT_REPO_URL;
   const installPrefix = process.env.SUPERPLAN_INSTALL_PREFIX || installMetadata?.install_prefix || '';
   const installerRefOverride = process.env.SUPERPLAN_REF;
-  const resolveLatestRelease = deps.resolveLatestRelease ?? resolveLatestReleaseFromGitHub;
+  const resolveLatestRelease = deps.resolveLatestRelease ?? ((url: string) => resolveLatestCommitFromGitHub(url, DEFAULT_REF));
   const stopProcesses = deps.stopManagedProcesses ?? stopManagedProcesses;
   const overlayInstallDir = process.env.SUPERPLAN_OVERLAY_INSTALL_DIR || installMetadata?.overlay?.install_dir || '';
   const runner = deps.runInstaller ?? runCommand;
@@ -420,6 +418,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       : await resolveLatestRelease(repoUrl);
     const ref = latestRelease.tag || installMetadata?.ref || DEFAULT_REF;
     const overlayReleaseBaseUrl = process.env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL
+      || (ref === 'main' || ref === 'dev' ? installMetadata?.overlay?.release_base_url : undefined)
       || buildReleaseBaseUrl(repoUrl, ref);
     const overlaySourcePath = process.env.SUPERPLAN_OVERLAY_SOURCE_PATH
       || (
@@ -489,12 +488,12 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       },
     };
   } catch (error: any) {
-    if (String(error?.message || '').includes('latest release')) {
+    if (String(error?.message || '').includes('latest commit')) {
       return {
         ok: false,
         error: {
-          code: 'LATEST_RELEASE_LOOKUP_FAILED',
-          message: error?.message || 'Latest release lookup failed',
+          code: 'LATEST_COMMIT_LOOKUP_FAILED',
+          message: error?.message || 'Latest commit lookup failed',
           retryable: true,
         },
       };
