@@ -175,12 +175,12 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
       await installManagedInstructionsFile(path.join(cwd, '.claude', 'CLAUDE.md'), globalSkillsDir);
     }
 
-    // Save local overlay preference
-    let overlayEnabled = true;
+    // Save local overlay preference - DISABLED by default to prevent crashes
+    let overlayEnabled = false;
     if (!useDefaults) {
       overlayEnabled = await confirm({
-        message: 'Enable Superplan Overlay for this project?',
-        default: true,
+        message: 'Enable Superplan Overlay for this project? (Experimental - may cause system issues)',
+        default: false,
       });
     }
     await writeOverlayPreference(overlayEnabled, { scope: 'local' });

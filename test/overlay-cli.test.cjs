@@ -101,6 +101,18 @@ test('overlay companion matches quoted Windows executable and workspace argument
   );
 });
 
+test('overlay process inspection degrades gracefully when spawning the system process list is blocked', async () => {
+  const { readRunningProcessEntriesWithSpawn } = loadDistModule('cli/overlay-companion.js');
+
+  const result = await readRunningProcessEntriesWithSpawn(() => {
+    const error = new Error('spawn EPERM');
+    error.code = 'EPERM';
+    throw error;
+  });
+
+  assert.equal(result, null);
+});
+
 async function waitForFile(targetPath, timeoutMs = 3000) {
   const startedAt = Date.now();
 
