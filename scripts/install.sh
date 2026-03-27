@@ -245,12 +245,13 @@ resolve_install_ref() {
   fi
 
   if [ -n "$SUPERPLAN_SOURCE_DIR" ]; then
-    SUPERPLAN_RESOLVED_REF="main"
+    SUPERPLAN_RESOLVED_REF="dev"
     return 0
   fi
 
-  # Default to main for the CLI source to ensure latest fixes
-  SUPERPLAN_RESOLVED_REF="main"
+  # This script is fetched from the dev branch, so default installs should
+  # reproduce that same branch unless the caller overrides SUPERPLAN_REF.
+  SUPERPLAN_RESOLVED_REF="dev"
   say "Defaulting Superplan CLI source to: $SUPERPLAN_RESOLVED_REF"
 }
 
