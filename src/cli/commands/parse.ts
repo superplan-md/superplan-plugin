@@ -19,6 +19,11 @@ export interface ParseDiagnostic {
   code: string;
   message: string;
   task_id?: string;
+  severity?: 'critical' | 'error' | 'warning' | 'info';
+  file?: string;
+  line?: number;
+  column?: number;
+  suggested_fix?: string;
 }
 
 export interface ParsedTask {

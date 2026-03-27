@@ -1790,6 +1790,100 @@ async function completeTask(taskId: string, command = 'task review complete'): P
   };
 }
 
+async function completeTasks(taskIds: string[], command = 'task review complete'): Promise<TaskCommandResult> {
+  const runtimePaths = getRuntimePaths();
+  const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
+  const invariantError = getInvariantError(runtimeState);
+  if (invariantError) {
+    return invariantError;
+  }
+
+  // Validate all tasks first
+  const tasksToComplete: Array<{ task: ParsedTask; taskRef: string }> = [];
+  
+  for (const taskId of taskIds) {
+    const parsedTask = await getParsedTask(taskId);
+    if (parsedTask.error) {
+      return {
+        ok: false,
+        error: {
+          code: 'BATCH_COMPLETE_FAILED',
+          message: `Failed to complete batch: ${parsedTask.error.error.message} (task: ${taskId})`,
+          retryable: false,
+        },
+      };
+    }
+
+    const matchedTask = parsedTask.task!;
+    const taskRef = getTaskRef(matchedTask);
+
+    if (!matchedTask.is_valid) {
+      return {
+        ok: false,
+        error: {
+          code: 'BATCH_COMPLETE_FAILED',
+          message: `Failed to complete batch: Task ${taskRef} is invalid`,
+          retryable: false,
+        },
+      };
+    }
+
+    const existingTaskState = runtimeState.tasks[taskRef];
+    if (existingTaskState?.status !== 'in_progress') {
+      return {
+        ok: false,
+        error: {
+          code: 'BATCH_COMPLETE_FAILED',
+          message: `Failed to complete batch: Task ${taskRef} has not been started`,
+          retryable: false,
+        },
+      };
+    }
+
+    if (matchedTask.completed_acceptance_criteria !== matchedTask.total_acceptance_criteria) {
+      return {
+        ok: false,
+        error: {
+          code: 'BATCH_COMPLETE_FAILED',
+          message: `Failed to complete batch: Task ${taskRef} is not complete (${matchedTask.completed_acceptance_criteria}/${matchedTask.total_acceptance_criteria} AC done)`,
+          retryable: false,
+        },
+      };
+    }
+
+    tasksToComplete.push({ task: matchedTask, taskRef });
+  }
+
+  // All tasks validated - complete them all
+  const timestamp = new Date().toISOString();
+  const completedTasks: ParsedTask[] = [];
+
+  for (const { task, taskRef } of tasksToComplete) {
+    const existingTaskState = runtimeState.tasks[taskRef];
+    runtimeState.tasks[taskRef] = {
+      ...existingTaskState,
+      status: 'done',
+      completed_at: timestamp,
+      updated_at: timestamp,
+    };
+
+    await appendEvent(runtimePaths.eventsPath, 'task.approved', taskRef, { command, workflowPhase: 'review' });
+    completedTasks.push(buildRuntimeTaskSnapshot(task, runtimeState.tasks[taskRef]));
+  }
+
+  await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  const overlay = await ensureOverlayFromMergedTasks({ command });
+
+  return {
+    ok: true,
+    data: {
+      tasks: completedTasks,
+      status: 'done',
+      ...(overlay ? { overlay } : {}),
+    },
+  };
+}
+
 async function approveTask(taskId: string, command = 'task review approve'): Promise<TaskCommandResult> {
   const runtimePaths = getRuntimePaths();
   const runtimeState = await readRuntimeState(runtimePaths.tasksPath);
@@ -2510,6 +2604,14 @@ export async function task(args: string[]): Promise<TaskCommandResult> {
 
   if (namespace === 'runtime' && action === 'request-feedback') {
     return withTaskNextAction(commandKey, await requestFeedbackTask(subjectId, message, 'task runtime request-feedback'));
+  }
+
+  // Batch completion: complete multiple tasks
+  if (namespace === 'review' && action === 'complete') {
+    const taskIds = [subjectId, ...positionalArgs.slice(3)].filter(Boolean);
+    if (taskIds.length > 1) {
+      return withTaskNextAction(commandKey, await completeTasks(taskIds, 'task review complete'));
+    }
   }
 
   return withTaskNextAction(commandKey, await completeTask(subjectId, 'task review complete'));

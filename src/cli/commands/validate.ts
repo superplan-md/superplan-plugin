@@ -5,6 +5,7 @@ import { parse, type ParseDiagnostic, type ParsedTask } from './parse';
 import { resolveWorkspaceRoot } from '../workspace-root';
 import { collectWorkspaceHealthIssues, workspaceIssuesToDiagnostics } from '../workspace-health';
 import { commandNextAction, stopNextAction, type NextAction } from '../next-action';
+import { applyAutoFix, type AutoFixResult } from '../graph-autofix';
 
 interface ValidateChangeResult {
   change_id: string;
@@ -12,6 +13,7 @@ interface ValidateChangeResult {
   graph: ChangeGraph | null;
   tasks: ParsedTask[];
   diagnostics: ParseDiagnostic[];
+  auto_fix?: AutoFixResult;
 }
 
 export type ValidateResult =
@@ -85,7 +87,8 @@ function dedupeDiagnostics(diagnostics: ParseDiagnostic[]): ParseDiagnostic[] {
 }
 
 export async function validate(args: string[] = []): Promise<ValidateResult> {
-  const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet');
+  const shouldFix = args.includes('--fix');
+  const positionalArgs = args.filter(arg => arg !== '--json' && arg !== '--quiet' && arg !== '--fix');
   const cwd = process.cwd();
   const changesRoot = path.join(resolveWorkspaceRoot(cwd), '.superplan', 'changes');
   const input = positionalArgs[0];
@@ -125,6 +128,14 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
     : [];
 
   for (const changeDir of changeDirs) {
+    const graphPath = path.join(changeDir, 'tasks.md');
+    let autoFixResult: AutoFixResult | undefined;
+
+    // Apply auto-fix if requested
+    if (shouldFix && await pathExists(graphPath)) {
+      autoFixResult = await applyAutoFix(graphPath);
+    }
+
     const graphResult = await loadChangeGraph(changeDir);
     const parsedResult = await parse([changeDir], { json: true });
     if (!parsedResult.ok) {
@@ -144,6 +155,7 @@ export async function validate(args: string[] = []): Promise<ValidateResult> {
       graph: graphResult.graph ?? null,
       tasks: parsedResult.data.tasks,
       diagnostics: changeDiagnostics,
+      ...(autoFixResult ? { auto_fix: autoFixResult } : {}),
     });
   }
 

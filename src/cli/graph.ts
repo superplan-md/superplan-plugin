@@ -6,6 +6,10 @@ export interface GraphDiagnostic {
   message: string;
   change_id?: string;
   task_id?: string;
+  severity?: 'critical' | 'error' | 'warning' | 'info';
+  file?: string;
+  line?: number;
+  suggested_fix?: string;
 }
 
 export interface GraphTaskEntry {
@@ -57,6 +61,7 @@ function normalizeInlineValue(value: string): string {
 
 function parseInlineArray(value: string): string[] {
   const trimmedValue = value.trim();
+  // Tolerate missing arrays - default to empty
   if (!trimmedValue || trimmedValue === '[]') {
     return [];
   }
@@ -81,7 +86,8 @@ function parseGraphMetadata(
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    const matchedChangeId = /^- Change ID:\s+`([^`]+)`$/.exec(line);
+    // Tolerate missing backticks around Change ID value
+    const matchedChangeId = /^- Change ID:\s+`?([^`\s]+)`?$/.exec(line);
     if (matchedChangeId) {
       changeId = matchedChangeId[1];
       continue;
@@ -96,15 +102,19 @@ function parseGraphMetadata(
   if (!changeId) {
     diagnostics.push({
       code: 'GRAPH_CHANGE_ID_MISSING',
-      message: 'Graph metadata is missing a `Change ID` entry.',
+      message: `Graph metadata is missing a Change ID entry. Add: - Change ID: \`${expectedChangeId}\``,
       change_id: expectedChangeId,
+      severity: 'error',
+      suggested_fix: `Add this line to Graph Metadata section:\n- Change ID: \`${expectedChangeId}\``,
     });
     changeId = expectedChangeId;
   } else if (changeId !== expectedChangeId) {
     diagnostics.push({
       code: 'GRAPH_CHANGE_ID_MISMATCH',
-      message: `Graph change id "${changeId}" does not match change directory "${expectedChangeId}".`,
+      message: `Graph change id "${changeId}" does not match change directory "${expectedChangeId}". Expected: \`${expectedChangeId}\``,
       change_id: expectedChangeId,
+      severity: 'error',
+      suggested_fix: `Change the Change ID value to: \`${expectedChangeId}\``,
     });
   }
 
@@ -138,11 +148,14 @@ function parseGraphLayout(
 
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
-    if (!line.trim()) {
+    const trimmedLine = line.trim();
+    
+    // Skip empty lines and comments
+    if (!trimmedLine || trimmedLine.startsWith('<!--')) {
       continue;
     }
 
-    const taskEntryMatch = /^- `([^`]+)`\s+(.+)$/.exec(line.trim());
+    const taskEntryMatch = /^- `([^`]+)`\s+(.+)$/.exec(trimmedLine);
     if (taskEntryMatch) {
       flushCurrentTask();
       currentTask = {
@@ -170,20 +183,27 @@ function parseGraphLayout(
       } else {
         diagnostics.push({
           code: 'GRAPH_TASK_FIELD_UNKNOWN',
-          message: `Unknown graph task field "${fieldName}" in ${changeId}.`,
+          message: `Unknown graph task field "${fieldName}" in ${changeId}. Valid fields: depends_on_all, depends_on_any, workstream, exclusive_group`,
           change_id: changeId,
           task_id: currentTask.task_id,
+          severity: 'warning',
+          suggested_fix: `Remove the unknown field or use one of: depends_on_all, depends_on_any, workstream, exclusive_group`,
         });
       }
       continue;
     }
 
-    diagnostics.push({
-      code: 'GRAPH_TASK_ENTRY_INVALID',
-      message: `Invalid graph layout line: ${line.trim()}. Expected format: - \`T-xxx\` Task title`,
-      change_id: changeId,
-      ...(currentTask ? { task_id: currentTask.task_id } : {}),
-    });
+    // Only report invalid lines if they're not comments or empty
+    if (trimmedLine && !trimmedLine.startsWith('<!--')) {
+      diagnostics.push({
+        code: 'GRAPH_TASK_ENTRY_INVALID',
+        message: `Invalid graph layout line: "${trimmedLine}". Expected format: - \`T-xxx\` Task title`,
+        change_id: changeId,
+        ...(currentTask ? { task_id: currentTask.task_id } : {}),
+        severity: 'error',
+        suggested_fix: `Use this format: - \`T-xxx\` Task title`,
+      });
+    }
   }
 
   flushCurrentTask();
@@ -206,6 +226,8 @@ function validateTaskEntries(
         message: `Task graph declares duplicate task id ${task.task_id}.`,
         change_id: changeId,
         task_id: task.task_id,
+        severity: 'error',
+        suggested_fix: `Remove the duplicate task entry or rename one of them`,
       });
       continue;
     }

@@ -94,6 +94,27 @@ Important install note:
 - Local-scope CLI commands now resolve the nearest repo workspace root, so running from `apps/...` reuses the repo-level `.superplan/` instead of creating nested local workspaces.
 - `visibility report` is the local-first evidence surface for workflow impact; it writes stable report artifacts under `.superplan/runtime/reports/`.
 
+### Agent-First Design Improvements
+
+**Parser Tolerance** (as of 2026-03-27):
+- Parser now tolerates missing backticks around Change ID values (auto-normalizes)
+- Parser tolerates missing dependency arrays (defaults to empty arrays)
+- Parser tolerates extra whitespace in task entries
+- Error messages include exact location and suggested fixes
+
+**Auto-Fix** (as of 2026-03-27):
+- `validate --fix` flag auto-corrects common format issues
+- Auto-fixes missing backticks around Change ID
+- Auto-fixes inconsistent whitespace in task entries
+- Shows what was fixed in JSON output for agent awareness
+- Fixes are idempotent (running twice produces same result)
+
+**Enhanced Diagnostics** (as of 2026-03-27):
+- All diagnostics include severity levels: `critical`, `error`, `warning`, `info`
+- Diagnostics include `suggested_fix` field with actionable guidance
+- Diagnostics are fully JSON-serializable for agent parsing
+- Example: `{"severity": "error", "suggested_fix": "Change the Change ID value to: \`expected-id\`"}`
+
 ## Task Storage And Parsing
 
 - Default parsing path is `.superplan/changes`, not repo-root `changes/`.
