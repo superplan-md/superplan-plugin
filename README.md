@@ -27,11 +27,13 @@ curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/
 
 That uses a stable installer URL and resolves the latest published GitHub release tag automatically before installing the CLI and matching overlay artifact.
 
-Windows:
+Windows PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.ps1 | iex
 ```
+
+Windows Command Prompt:
 
 ```bat
 curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
@@ -127,6 +129,8 @@ curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superp
 ```
 
 The Windows installer resolves the latest published GitHub release tag for the CLI source when `SUPERPLAN_REF` is not pinned, and it installs the Windows overlay companion when the matching release artifact is available.
+
+**Note on Overlay:** The Superplan Overlay desktop companion is experimental and disabled by default. It may cause system instability or crashes on some machines. Only enable it if you need the visual interface.
 
 If you want to pin a specific release instead, keep the same installer URL and set `SUPERPLAN_REF` explicitly:
 

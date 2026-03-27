@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { readInstallMetadata } from './install-metadata';
 import { readVisibilityEvents } from './visibility-runtime';
 
@@ -41,8 +41,10 @@ interface RunningProcessEntry {
   command: string;
 }
 
-const LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS = 60_000;
+const LAUNCH_FAILURE_SUPPRESSION_WINDOW_MS = 300_000; // 5 minutes to prevent rapid crash loops
 const LAUNCH_RESULT_WAIT_MS = process.platform === 'linux' ? 300 : 50;
+
+type SpawnProcess = typeof spawn;
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -230,9 +232,15 @@ async function waitForLaunchResult(child: ReturnType<typeof spawn>): Promise<{ o
 }
 
 async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null> {
+  return await readRunningProcessEntriesWithSpawn(spawn);
+}
+
+export async function readRunningProcessEntriesWithSpawn(
+  spawnProcess: SpawnProcess,
+): Promise<RunningProcessEntry[] | null> {
   if (process.platform === 'win32') {
     return await new Promise(resolve => {
-      const child = spawn('powershell', [
+      const child = safeSpawnProcess(spawnProcess, 'powershell', [
         '-NoProfile',
         '-Command',
         'Get-CimInstance Win32_Process | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress',
@@ -240,9 +248,19 @@ async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null
         stdio: ['ignore', 'pipe', 'ignore'],
       });
 
+      if (!child) {
+        resolve(null);
+        return;
+      }
+
+      if (!child.stdout) {
+        resolve(null);
+        return;
+      }
+
       let stdout = '';
 
-      child.stdout.on('data', chunk => {
+      child.stdout.on('data', (chunk: Buffer | string) => {
         stdout += String(chunk);
       });
 
@@ -250,7 +268,7 @@ async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null
         resolve(null);
       });
 
-      child.on('close', code => {
+      child.on('close', (code: number | null) => {
         if (code !== 0) {
           resolve(null);
           return;
@@ -266,13 +284,23 @@ async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null
   }
 
   return await new Promise(resolve => {
-    const child = spawn('/bin/ps', ['-axo', 'pid=,command='], {
+    const child = safeSpawnProcess(spawnProcess, '/bin/ps', ['-axo', 'pid=,command='], {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
 
+    if (!child) {
+      resolve(null);
+      return;
+    }
+
+    if (!child.stdout) {
+      resolve(null);
+      return;
+    }
+
     let stdout = '';
 
-    child.stdout.on('data', chunk => {
+    child.stdout.on('data', (chunk: Buffer | string) => {
       stdout += String(chunk);
     });
 
@@ -280,7 +308,7 @@ async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null
       resolve(null);
     });
 
-    child.on('close', code => {
+    child.on('close', (code: number | null) => {
       if (code !== 0) {
         resolve(null);
         return;
@@ -294,6 +322,19 @@ async function readRunningProcessEntries(): Promise<RunningProcessEntry[] | null
       );
     });
   });
+}
+
+function safeSpawnProcess(
+  spawnProcess: SpawnProcess,
+  command: string,
+  args: string[],
+  options: Parameters<SpawnProcess>[2],
+): ChildProcess | null {
+  try {
+    return spawnProcess(command, args, options);
+  } catch {
+    return null;
+  }
 }
 
 function getMatchingOverlayProcesses(
@@ -550,6 +591,7 @@ export async function launchInstalledOverlayCompanion(
       cwd: resolvedWorkspacePath,
       detached: true,
       stdio: 'ignore' as const,
+      windowsHide: true, // Prevent console window flash on Windows
       env: {
         ...process.env,
         SUPERPLAN_OVERLAY_WORKSPACE: resolvedWorkspacePath,
@@ -595,8 +637,9 @@ export async function launchInstalledOverlayCompanion(
     }
 
     const child = spawn(launchPlan.command, launchPlan.args, commonSpawnOptions);
-    child.unref();
+    
     const launchResult = await waitForLaunchResult(child);
+    
     if (!launchResult.ok) {
       return {
         ...companionStatus,
@@ -608,6 +651,8 @@ export async function launchInstalledOverlayCompanion(
       };
     }
 
+    child.unref();
+
     return {
       ...companionStatus,
       attempted: true,
@@ -615,6 +660,7 @@ export async function launchInstalledOverlayCompanion(
       workspace_path: resolvedWorkspacePath,
     };
   } catch (error: any) {
+    // Catch all errors to prevent crashes
     return {
       ...companionStatus,
       attempted: true,

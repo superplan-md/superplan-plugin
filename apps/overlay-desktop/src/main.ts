@@ -507,6 +507,112 @@ function boardStatLiveMarkup(
   `;
 }
 
+function shouldShowBoardHero(snapshot: OverlaySnapshot, viewModel: PrototypeViewModel): boolean {
+  const totalTracked = viewModel.columnCounts.in_progress
+    + viewModel.columnCounts.backlog
+    + viewModel.columnCounts.done
+    + viewModel.columnCounts.blocked
+    + viewModel.columnCounts.needs_feedback;
+
+  return !snapshot.active_task && (viewModel.attentionState === 'all_tasks_done' || totalTracked === 0);
+}
+
+function boardHeroStatMarkup(label: string, value: string, note: string, tone: 'warm' | 'cool' | 'mint'): string {
+  return `
+    <article class="landing-stat landing-stat--${tone}">
+      <span class="landing-stat__label">${escapeHtml(label)}</span>
+      <strong class="landing-stat__value">${escapeHtml(value)}</strong>
+      <p class="landing-stat__note">${escapeHtml(note)}</p>
+    </article>
+  `;
+}
+
+function boardHeroFeatureMarkup(
+  eyebrow: string,
+  title: string,
+  description: string,
+  tone: 'sunrise' | 'lagoon' | 'sand',
+): string {
+  return `
+    <article class="landing-feature landing-feature--${tone}">
+      <p class="landing-feature__eyebrow">${escapeHtml(eyebrow)}</p>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(description)}</p>
+    </article>
+  `;
+}
+
+function boardHeroMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewModel): string {
+  const totalTracked = viewModel.columnCounts.in_progress
+    + viewModel.columnCounts.backlog
+    + viewModel.columnCounts.done
+    + viewModel.columnCounts.blocked
+    + viewModel.columnCounts.needs_feedback;
+  const doneCount = viewModel.columnCounts.done;
+  const completionRate = totalTracked > 0
+    ? `${Math.round((doneCount / totalTracked) * 100)}%`
+    : '100%';
+  const heroTitle = viewModel.focusedChange
+    ? viewModel.focusedChange.title
+    : 'One warm control deck for shipping work';
+  const heroCopy = snapshot.attention_state === 'all_tasks_done'
+    ? 'Everything tracked here has landed cleanly. The board stays visible so the next change can start from proof, not guesswork.'
+    : 'Keep planning, execution, and proof in one polished surface. The overlay should feel less like an empty dashboard and more like a confident launch deck.';
+
+  const partnerRail = [
+    'Task Graphs',
+    'Runtime Signals',
+    'Review Ready',
+    'Workspace Proof',
+  ].map(label => `<span class="landing-rail__pill">${escapeHtml(label)}</span>`).join('');
+
+  return `
+    <section class="landing-hero">
+      <div class="landing-hero__copy">
+        <p class="landing-hero__eyebrow">One stop visibility for agent work</p>
+        <h2>${escapeHtml(heroTitle)}</h2>
+        <p class="landing-hero__lede">${escapeHtml(heroCopy)}</p>
+        <div class="landing-hero__chips">
+          <span class="landing-chip landing-chip--strong">${escapeHtml(getExpandedSurfaceLabel(snapshot, viewModel))}</span>
+          <span class="landing-chip">${escapeHtml(viewModel.updatedLabel)}</span>
+          <span class="landing-chip">${escapeHtml(viewModel.workspaceLabel)}</span>
+        </div>
+      </div>
+      <div class="landing-hero__stats">
+        ${boardHeroStatMarkup('Completion', completionRate, 'Tracked work wrapped with visible proof.', 'warm')}
+        ${boardHeroStatMarkup('Queued', String(viewModel.columnCounts.backlog), 'Tasks waiting for the next run loop.', 'cool')}
+        ${boardHeroStatMarkup('Support', viewModel.columnCounts.needs_feedback > 0 ? 'Needed' : 'Calm', 'Surface blockers and handoffs early.', 'mint')}
+      </div>
+    </section>
+
+    <section class="landing-features" aria-label="Overlay highlights">
+      ${boardHeroFeatureMarkup(
+        'Command-ready',
+        'Clear starting points',
+        'Keep the next move obvious with live state, task focus, and update timing in one glance.',
+        'sunrise',
+      )}
+      ${boardHeroFeatureMarkup(
+        'Travel-light',
+        'A calmer board language',
+        'Use warmer gradients, spotlight cards, and trust cues so the board feels intentional even when idle.',
+        'lagoon',
+      )}
+      ${boardHeroFeatureMarkup(
+        'Proof-first',
+        'Visible completion',
+        'Finished work stays readable, reviewable, and ready to hand off without digging through runtime files.',
+        'sand',
+      )}
+    </section>
+
+    <div class="landing-rail" aria-label="Overlay capabilities">
+      <span class="landing-rail__label">Built around</span>
+      <div class="landing-rail__items">${partnerRail}</div>
+    </div>
+  `;
+}
+
 function getTaskNote(task: OverlayTask): string | null {
   if (task.status === 'needs_feedback') {
     return task.message ?? task.description ?? null;
@@ -1262,14 +1368,22 @@ function activeStripMarkup(snapshot: OverlaySnapshot, viewModel: PrototypeViewMo
   ].filter(Boolean).join('');
 
   if (!stripTask) {
+    const idleTitle = snapshot.attention_state === 'all_tasks_done'
+      ? 'Everything wrapped and ready for the next trip'
+      : 'No active task, but the board is ready';
+    const idleCopy = snapshot.attention_state === 'all_tasks_done'
+      ? 'All tracked work is complete. Keep this surface open as a handoff-ready summary while you decide what ships next.'
+      : 'The queue is quiet right now. Use this moment to shape the next change, confirm proof, or start the next guided run.';
+
     return `
       <section class="active-strip active-strip--empty">
         <div class="active-strip__main">
           <div class="active-strip__status">
-            <span>Idle</span>
+            <span>${escapeHtml(viewModel.secondaryLabel)}</span>
           </div>
           <div class="active-strip__copy">
-            <h2>No active task</h2>
+            <h2>${escapeHtml(idleTitle)}</h2>
+            <p>${escapeHtml(idleCopy)}</p>
           </div>
         </div>
         <div class="active-strip__stats">
@@ -1403,6 +1517,8 @@ function render(snapshot: OverlaySnapshot): void {
             </button>
           </div>
         </header>
+
+        ${shouldShowBoardHero(snapshot, viewModel) ? boardHeroMarkup(snapshot, viewModel) : ''}
 
         ${activeStripMarkup(snapshot, viewModel)}
 

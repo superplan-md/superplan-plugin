@@ -336,9 +336,15 @@ fn apply_overlay_visibility(app_handle: &tauri::AppHandle, visible: bool) -> Res
         let panel = app_handle
             .get_webview_panel("main")
             .map_err(|_| "failed to access main overlay panel".to_string())?;
+        let window = app_handle
+            .get_webview_window("main")
+            .ok_or_else(|| "failed to access main overlay window".to_string())?;
 
         if visible {
             panel.show();
+            window
+                .set_focus()
+                .map_err(|error| format!("failed to focus main overlay window: {error}"))?;
         } else {
             panel.hide();
         }
