@@ -5,6 +5,7 @@ import { parse } from "./commands/parse";
 import { init } from "./commands/init";
 import { task } from "./commands/task";
 import { removeCli } from "./commands/remove";
+import { uninstallCli } from "./commands/uninstall";
 import { run } from "./commands/run";
 import { sync } from "./commands/sync";
 import { status } from "./commands/status";
@@ -194,6 +195,13 @@ function inferErrorNextAction(command: string | undefined, error: { code: string
     );
   }
 
+  if (error.code === 'INVALID_UNINSTALL_COMMAND') {
+    return stopNextAction(
+      'The uninstall command is invalid. Use `superplan uninstall --yes --json` for automation.',
+      'Invalid uninstall invocations should terminate with the exact supported non-interactive form.',
+    );
+  }
+
   if (error.code === 'INVALID_INIT_COMMAND' || error.code === 'INTERACTIVE_REQUIRED') {
     return stopNextAction(
       'The init invocation is invalid for the current mode. Use `superplan init --scope <local|global|both|skip> --yes --json` for automation.',
@@ -320,6 +328,11 @@ export const router: Record<string, CommandHandler> = {
     scope: options.scope === 'local' || options.scope === 'global' || options.scope === 'skip'
       ? options.scope
       : undefined,
+  }),
+  uninstall: async (args, options) => uninstallCli(args, {
+    json: options.json,
+    quiet: options.quiet,
+    yes: options.yes,
   }),
   doctor: async (args) => doctor(args),
   parse: async (args, options) => parse(args, options),
