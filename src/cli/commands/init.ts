@@ -311,6 +311,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     }
 
     // Auto-install global config if missing (needed for skills)
+    // Always auto-install without prompting - global is required for local to work
     if (!await pathExists(globalConfigPath)) {
       if (!useDefaults && !isQuiet) {
         const proceedWithInstall = await confirm({
