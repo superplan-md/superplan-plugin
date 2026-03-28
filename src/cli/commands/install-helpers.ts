@@ -588,12 +588,10 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       {
         name: 'windsurf',
         path: path.join(baseDir, '.windsurf'),
-        install_path: path.join(baseDir, '.windsurf', 'skills'),
-        install_kind: 'skills_namespace',
-        bootstrap_strength: 'skills_only',
-        cleanup_paths: [
-          path.join(baseDir, '.windsurf', 'commands', 'superplan.md'),
-        ],
+        install_path: path.join(baseDir, '.windsurfrules'),
+        install_kind: 'pointer_rule',
+        bootstrap_strength: 'rule_bootstrap',
+        cleanup_paths: [],
       },
     ];
   }
@@ -678,17 +676,6 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       bootstrap_strength: 'rule_bootstrap',
       cleanup_paths: [
         path.join(baseDir, '.github', 'copilot-instructions.md'),
-      ],
-    },
-    {
-      name: 'windsurf',
-      path: path.join(baseDir, '.windsurf'),
-      install_path: path.join(baseDir, '.windsurf', 'skills'),
-      install_kind: 'skills_namespace',
-      bootstrap_strength: 'skills_only',
-      cleanup_paths: [
-        path.join(baseDir, '.windsurf', 'commands', 'superplan.md'),
-        // Note: .windsurf/skills/ is the install_path, don't clean it up
       ],
     },
   ];
