@@ -631,12 +631,6 @@ if [ ! -x "$INSTALL_BIN_DIR/superplan" ]; then
   fail "superplan binary was not installed to $INSTALL_BIN_DIR"
 fi
 
-# Auto-install global Superplan (creates ~/.config/superplan with skills)
-say "Setting up global Superplan configuration..."
-run_quiet_command superplan-install "$INSTALL_BIN_DIR/superplan" init --yes --quiet || {
-  say "Warning: Failed to auto-install global Superplan configuration. Run 'superplan init' to complete setup."
-}
-
 # Defer machine setup prompt to the end after all installation messages
 
 INSTALL_STATE_DIR="${HOME}/.config/superplan"
