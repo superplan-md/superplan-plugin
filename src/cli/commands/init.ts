@@ -311,25 +311,8 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     }
 
     // Auto-install global config if missing (needed for skills)
+    // Always auto-install without prompting - global is required for local to work
     if (!await pathExists(globalConfigPath)) {
-      if (!isQuiet) {
-        const proceedWithInstall = await confirm({
-          message: 'Superplan global installation not found. Would you like to install it now?',
-          default: true,
-        });
-
-        if (!proceedWithInstall) {
-          return {
-            ok: false,
-            error: {
-              code: 'INSTALL_REQUIRED',
-              message: 'Superplan global installation is required.',
-              retryable: false,
-            },
-          };
-        }
-      }
-
       const installResult = await runInstall({ quiet: true, json: true });
       if (!installResult.ok) {
         return {
