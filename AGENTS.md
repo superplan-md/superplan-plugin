@@ -4,8 +4,7 @@
 Apply this contract for any request that may touch the repo: implementation, debugging, review, planning, repo-specific clarification, or broad exploration.
 
 Before doing any of that work, load and follow `superplan-entry` from the first available path:
-- `.claude/skills/superplan-entry/SKILL.md`
-- `~/.claude/skills/superplan-entry/SKILL.md`
+- `/Users/puneetbhatt/.config/superplan/skills/superplan-entry/SKILL.md`
 
 Non-negotiable rules:
 - No implementation before loading and following `superplan-entry`.
