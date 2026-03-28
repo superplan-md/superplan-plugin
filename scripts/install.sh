@@ -633,7 +633,7 @@ fi
 
 # Auto-install global Superplan (creates ~/.config/superplan with skills)
 say "Setting up global Superplan configuration..."
-run_quiet_command superplan-install "$INSTALL_BIN_DIR/superplan" install --quiet || {
+run_quiet_command superplan-install "$INSTALL_BIN_DIR/superplan" init --yes --quiet || {
   say "Warning: Failed to auto-install global Superplan configuration. Run 'superplan init' to complete setup."
 }
 
