@@ -180,7 +180,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
 
     // Determine installation scope: global or local
     let installScope: 'global' | 'local';
-    
+
     if (options.global) {
       installScope = 'global';
     } else if (options.local) {
@@ -203,7 +203,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     if (installScope === 'global') {
       // Check if global superplan exists, if not install it
       if (!await pathExists(globalConfigPath)) {
-        if (!isQuiet) {
+        if (!useDefaults && !isQuiet) {
           const proceedWithInstall = await confirm({
             message: 'Superplan global installation not found. Would you like to install it now?',
             default: true,
@@ -214,7 +214,7 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
               ok: false,
               error: {
                 code: 'INSTALL_REQUIRED',
-                message: 'Superplan global installation is required.',
+                message: 'Superplan global installation is required to initialize a project.',
                 retryable: false,
               },
             };
@@ -313,24 +313,6 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     // Auto-install global config if missing (needed for skills)
     // Always auto-install without prompting - global is required for local to work
     if (!await pathExists(globalConfigPath)) {
-      if (!useDefaults && !isQuiet) {
-        const proceedWithInstall = await confirm({
-          message: 'Superplan global installation not found. Would you like to install it now?',
-          default: true,
-        });
-
-        if (!proceedWithInstall) {
-          return {
-            ok: false,
-            error: {
-              code: 'INSTALL_REQUIRED',
-              message: 'Superplan global installation is required.',
-              retryable: false,
-            },
-          };
-        }
-      }
-
       const installResult = await runInstall({ quiet: true, json: true });
       if (!installResult.ok) {
         return {

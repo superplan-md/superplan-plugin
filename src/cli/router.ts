@@ -98,7 +98,6 @@ function printHumanSuccess(command: string, result: CommandResult): boolean {
       return true;
     }
   }
-
   return false;
 }
 
