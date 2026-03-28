@@ -178,49 +178,20 @@ export async function init(options: InitOptions = {}): Promise<InitResult> {
     const globalSkillsDir = path.join(homeDir, '.config', 'superplan', 'skills');
     const globalPaths = getGlobalSuperplanPaths();
 
-    // Determine installation scope: global or local
-    let installScope: 'global' | 'local';
+    // Determine installation scope: global only (no local .superplan folder)
+    let installScope: 'global' | 'local' = 'global';
 
-    if (options.global) {
-      installScope = 'global';
-    } else if (options.local) {
-      installScope = 'local';
-    } else if (!useDefaults && !isQuiet) {
-      const scopeChoice = await select({
-        message: 'How would you like to install Superplan?',
-        choices: [
-          { name: 'Global - Available in all projects (~/.config/superplan/)', value: 'global' },
-          { name: 'Local - Only this repository (visible in git)', value: 'local' },
-        ],
-      });
-      installScope = scopeChoice as 'global' | 'local';
-    } else {
-      // Default to local in quiet mode
+    if (options.local) {
       installScope = 'local';
     }
+    // global is now the default, --global flag still works for explicit global
+    // No prompts for scope selection
 
     // Handle global installation
     if (installScope === 'global') {
-      // Check if global superplan exists, if not install it
+      // Check if global superplan exists, if not auto-install silently
       if (!await pathExists(globalConfigPath)) {
-        if (!useDefaults && !isQuiet) {
-          const proceedWithInstall = await confirm({
-            message: 'Superplan global installation not found. Would you like to install it now?',
-            default: true,
-          });
-
-          if (!proceedWithInstall) {
-            return {
-              ok: false,
-              error: {
-                code: 'INSTALL_REQUIRED',
-                message: 'Superplan global installation is required to initialize a project.',
-                retryable: false,
-              },
-            };
-          }
-        }
-
+        // Always auto-install without prompting
         const installResult = await runInstall({ quiet: true, json: true });
         if (!installResult.ok) {
           return {
