@@ -179,6 +179,16 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
           path.join(baseDir, '.agents'),
         ],
       },
+      {
+        name: 'windsurf',
+        path: path.join(baseDir, '.windsurf'),
+        install_path: path.join(baseDir, '.windsurf', 'rules'),
+        install_kind: 'windsurf_rules',
+        cleanup_paths: [
+          path.join(baseDir, '.windsurf', 'skills'),
+          path.join(baseDir, '.windsurfrules'),
+        ],
+      },
     ];
   }
 
@@ -223,6 +233,16 @@ function getAgentDefinitions(baseDir: string, scope: AgentScope): AgentEnvironme
       install_path: path.join(baseDir, '.gemini', 'GEMINI.md'),
       install_kind: 'managed_global_rule',
     },
+    {
+      name: 'windsurf',
+      path: path.join(baseDir, '.windsurf'),
+      install_path: path.join(baseDir, '.windsurf', 'rules'),
+      install_kind: 'windsurf_rules',
+      cleanup_paths: [
+        path.join(baseDir, '.windsurf', 'skills'),
+        path.join(baseDir, '.windsurfrules'),
+      ],
+    },
   ];
 }
 
@@ -251,6 +271,13 @@ function getManagedInstallPaths(agent: AgentEnvironment, managedSkillNames: stri
       path.join(agent.install_path, 'memory-bank', 'product.md'),
       path.join(agent.install_path, 'memory-bank', 'guidelines.md'),
       path.join(agent.install_path, 'memory-bank', 'tech.md'),
+      ...(agent.cleanup_paths ?? []),
+    ];
+  }
+
+  if (agent.install_kind === 'windsurf_rules') {
+    return [
+      ...managedSkillNames.map(skillName => path.join(agent.install_path, `${skillName}.md`)),
       ...(agent.cleanup_paths ?? []),
     ];
   }
@@ -434,6 +461,19 @@ async function removeAgentInstalls(
       for (const cleanupPath of agent.cleanup_paths ?? []) {
         await removePath(cleanupPath, removedPaths);
       }
+      continue;
+    }
+
+    if (agent.install_kind === 'windsurf_rules') {
+      // Remove windsurf rules directory
+      for (const managedSkillName of managedSkillNames) {
+        await removePath(path.join(agent.install_path, `${managedSkillName}.md`), removedPaths);
+      }
+      for (const cleanupPath of agent.cleanup_paths ?? []) {
+        await removePath(cleanupPath, removedPaths);
+      }
+      // Also remove the agent's base directory
+      await removePath(agent.path, removedPaths);
       continue;
     }
 
