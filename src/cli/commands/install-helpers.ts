@@ -621,7 +621,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       bootstrap_strength: 'skills_only',
       cleanup_paths: [
         path.join(baseDir, '.cursor', 'commands', 'superplan.md'),
-        path.join(baseDir, '.cursor', 'skills')
+        // Note: .cursor/skills/ is the install_path, don't clean it up
       ],
     },
     {
@@ -632,8 +632,8 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       install_kind: 'skills_namespace',
       bootstrap_strength: 'skills_only',
       cleanup_paths: [
-        path.join(baseDir, '.codex', 'skills'),
         path.join(baseDir, '.codex', 'skills', 'superplan')
+        // Note: .codex/skills/ is the install_path, don't clean it up
       ],
     },
     {
@@ -645,7 +645,7 @@ export function getAgentDefinitions(baseDir: string, scope: AgentScope): Extende
       bootstrap_strength: 'skills_only',
       cleanup_paths: [
         path.join(baseDir, '.config', 'opencode', 'commands', 'superplan.md'),
-        path.join(baseDir, '.config', 'opencode', 'skills')
+        // Note: .config/opencode/skills/ is the install_path, don't clean it up
       ],
     },
 
