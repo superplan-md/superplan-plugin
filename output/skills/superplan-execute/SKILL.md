@@ -88,6 +88,7 @@ Align execution to the CLI that exists today.
 
 Current CLI execution surface:
 
+- `superplan quick "Task title" --priority high` - One-shot task creation
 - `superplan task inspect show <task_ref> --json`
 - `superplan run --json`
 - `superplan run <task_ref> --json`
