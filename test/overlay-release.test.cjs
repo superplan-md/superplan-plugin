@@ -51,6 +51,36 @@ test('overlay release target resolves stable artifact names for supported platfo
   });
 });
 
+test('overlay release pnpm invocation uses a shell-backed command on Windows', () => {
+  const { getPnpmInvocation } = require(path.join(REPO_ROOT, 'scripts', 'overlay-release.js'));
+
+  const invocation = getPnpmInvocation(['run', 'build'], 'C:\\repo\\apps\\desktop', 'win32');
+
+  assert.deepEqual(invocation, {
+    command: 'pnpm',
+    args: ['--dir', 'C:\\repo\\apps\\desktop', 'run', 'build'],
+    options: {
+      stdio: 'inherit',
+      shell: true,
+    },
+  });
+});
+
+test('overlay release pnpm invocation stays direct on unix-like runners', () => {
+  const { getPnpmInvocation } = require(path.join(REPO_ROOT, 'scripts', 'overlay-release.js'));
+
+  const invocation = getPnpmInvocation(['run', 'build'], '/repo/apps/desktop', 'linux');
+
+  assert.deepEqual(invocation, {
+    command: 'pnpm',
+    args: ['--dir', '/repo/apps/desktop', 'run', 'build'],
+    options: {
+      stdio: 'inherit',
+      shell: false,
+    },
+  });
+});
+
 test('overlay release packaging creates a stable macOS tarball from the Electron app bundle', async () => {
   const { packageOverlayRelease } = require(path.join(REPO_ROOT, 'scripts', 'overlay-release.js'));
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'superplan-overlay-release-macos-'));

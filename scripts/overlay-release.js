@@ -3,7 +3,7 @@
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_APP_DIR = path.join(REPO_ROOT, 'apps', 'desktop');
@@ -97,14 +97,28 @@ async function writeSha256File(targetPath) {
   return checksumPath;
 }
 
-function getPnpmCommand() {
-  return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+function getPnpmInvocation(args, appDir, platform = process.platform) {
+  return {
+    command: 'pnpm',
+    args: ['--dir', appDir, ...args],
+    options: {
+      stdio: 'inherit',
+      shell: platform === 'win32',
+    },
+  };
 }
 
 function runPnpm(args, appDir) {
-  execFileSync(getPnpmCommand(), ['--dir', appDir, ...args], {
-    stdio: 'inherit',
-  });
+  const invocation = getPnpmInvocation(args, appDir);
+  const result = spawnSync(invocation.command, invocation.args, invocation.options);
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  if (typeof result.status === 'number' && result.status !== 0) {
+    throw new Error(`pnpm ${args.join(' ')} failed with exit code ${result.status}`);
+  }
 }
 
 function getElectronBuilderArgs(target) {
@@ -404,6 +418,7 @@ module.exports = {
   buildOverlayRelease,
   getElectronBuilderArgs,
   getOverlayReleaseTarget,
+  getPnpmInvocation,
   packageOverlayRelease,
   parseArgs,
 };
