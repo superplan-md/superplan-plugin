@@ -45,15 +45,13 @@ After install, Superplan will ask if you want to run `superplan init`.
 
 ## Quick Start
 
+```bash
+superplan init
+```
+
 ![Superplan Init](src/assets/superplan_init.png)
 
 ![Agent Selection](src/assets/agent_selection.png)
-
-```bash
-superplan init
-superplan change new my-feature --json
-superplan run --json
-```
 
 ---
 
