@@ -39,7 +39,7 @@ test('update reruns the bundled installer with recorded install metadata', async
         url: 'https://github.com/example/custom-superplan/releases/tag/release',
       }),
       runInstaller: async (command, args, options) => {
-        calls.push({ command, args, env: options.env });
+        calls.push({ command, args, env: options.env, streamOutput: options.streamOutput });
         return {
           code: 0,
           stdout: 'Installed Superplan',
@@ -90,6 +90,7 @@ test('update reruns the bundled installer with recorded install metadata', async
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, path.join(sandbox.root, 'overlay-bin'));
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_INSTALL_DIR, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
     assert.equal(calls[0].env.SUPERPLAN_RUN_SETUP_AFTER_INSTALL, '0');
+    assert.equal(calls[0].streamOutput, false);
   });
 });
 
@@ -130,7 +131,7 @@ test('update resolves and installs the latest published release before refreshin
         };
       },
       runInstaller: async (command, args, options) => {
-        calls.push({ command, args, env: options.env });
+        calls.push({ command, args, env: options.env, streamOutput: options.streamOutput });
         return {
           code: 0,
           stdout: 'Installed Superplan',
@@ -187,6 +188,120 @@ test('update resolves and installs the latest published release before refreshin
     assert.equal(calls[0].env.SUPERPLAN_REF, 'alpha.14');
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL, 'https://github.com/example/custom-superplan/releases/download/alpha.14');
     assert.equal(calls[0].env.SUPERPLAN_LATEST_COMMITISH, 'bea27a2c63f941a99fa6b8afa55348054130fb6f');
+    assert.equal(calls[0].streamOutput, false);
+  });
+});
+
+test('update emits progress messages and streams installer output when not quiet', async () => {
+  const sandbox = await makeSandbox('superplan-update-progress-');
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+    const progress = [];
+    const calls = [];
+
+    const result = await update({ json: true, quiet: false }, {
+      readInstallMetadata: async () => ({
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+        ref: 'alpha.25',
+        install_prefix: path.join(sandbox.root, 'prefix'),
+      }),
+      resolveLatestRelease: async () => ({
+        tag: 'main',
+        commitish: 'f00dbabe1234567890abcdef1234567890abcd',
+        url: 'https://github.com/example/custom-superplan/commit/f00dbabe1234567890abcdef1234567890abcd',
+      }),
+      stopManagedProcesses: async () => ({
+        stopped: [],
+      }),
+      runInstaller: async (command, args, options) => {
+        calls.push({ command, args, env: options.env, streamOutput: options.streamOutput });
+        return {
+          code: 0,
+          stdout: 'Installed Superplan',
+          stderr: '',
+        };
+      },
+      refreshSkills: async () => ({
+        ok: true,
+        data: {
+          scope: 'skip',
+          refreshed: false,
+          agents: [],
+          verified: true,
+        },
+      }),
+      reportProgress: (message) => {
+        progress.push(message);
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].streamOutput, true);
+    assert.deepEqual(progress, [
+      'Checking latest available Superplan source...',
+      'Preparing update from main (f00dbabe1234)...',
+      'Stopping running Superplan processes...',
+      'Running installer...',
+      'Refreshing installed skills...',
+      'Update complete.',
+    ]);
+  });
+});
+
+test('update pins moving refs to the latest commit and does not reuse stale overlay release urls', async () => {
+  const sandbox = await makeSandbox('superplan-update-main-branch-');
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+    const calls = [];
+
+    const result = await update({ json: true, quiet: true }, {
+      readInstallMetadata: async () => ({
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+        ref: 'alpha.25',
+        install_prefix: path.join(sandbox.root, 'prefix'),
+        overlay: {
+          install_method: 'downloaded_prebuilt',
+          release_base_url: 'https://github.com/example/custom-superplan/releases/download/alpha.25',
+          install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
+        },
+      }),
+      resolveLatestRelease: async () => ({
+        tag: 'main',
+        commitish: 'f00dbabe1234567890abcdef1234567890abcd',
+        url: 'https://github.com/example/custom-superplan/commit/f00dbabe1234567890abcdef1234567890abcd',
+      }),
+      runInstaller: async (command, args, options) => {
+        calls.push({ command, args, env: options.env, streamOutput: options.streamOutput });
+        return {
+          code: 0,
+          stdout: 'Installed Superplan',
+          stderr: '',
+        };
+      },
+      stopManagedProcesses: async () => ({
+        stopped: [],
+      }),
+      refreshSkills: async () => ({
+        ok: true,
+        data: {
+          scope: 'skip',
+          refreshed: false,
+          agents: [],
+          verified: true,
+        },
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].env.SUPERPLAN_REF, 'main');
+    assert.equal(calls[0].env.SUPERPLAN_LATEST_COMMITISH, 'f00dbabe1234567890abcdef1234567890abcd');
+    assert.equal('SUPERPLAN_OVERLAY_RELEASE_BASE_URL' in calls[0].env, false);
   });
 });
 

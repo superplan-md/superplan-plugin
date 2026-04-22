@@ -8,15 +8,6 @@ import {
   resolveWorkspaceRoot,
 } from './project-identity';
 
-function pathExists(targetPath: string): boolean {
-  try {
-    fs.accessSync(targetPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function resolveStartDir(startDir: string): string {
   try {
     return fs.realpathSync(startDir);

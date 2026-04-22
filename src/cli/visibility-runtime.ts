@@ -133,10 +133,6 @@ interface VisibilityPaths {
   latest_report_path: string;
 }
 
-function pathExists(targetPath: string): Promise<boolean> {
-  return fs.access(targetPath).then(() => true).catch(() => false);
-}
-
 function isVisibilityEventSource(value: unknown): value is VisibilityEventSource {
   return value === 'human' || value === 'agent' || value === 'unknown';
 }

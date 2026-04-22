@@ -307,6 +307,59 @@ test('init in human mode prints a concise success message instead of the full pa
   assert.equal(errors.length, 0);
 });
 
+test('update in human mode prints concise success instead of the JSON payload', async () => {
+  const { routeCommand, router } = loadDistModule('cli/router.js');
+  const originalUpdate = router.update;
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  const output = [];
+  const errors = [];
+
+  router.update = async () => ({
+    ok: true,
+    data: {
+      updated: true,
+      install_method: 'remote_repo',
+      repo_url: 'https://github.com/example/custom-superplan.git',
+      ref: 'main',
+      commitish: 'f00dbabe1234567890abcdef1234567890abcd',
+      release_url: 'https://github.com/example/custom-superplan/commit/f00dbabe1234567890abcdef1234567890abcd',
+      install_prefix: null,
+      skills_refreshed: true,
+      skills_scope: 'both',
+      stopped_processes: 2,
+      next_action: {
+        type: 'command',
+        command: 'superplan doctor --json',
+        reason: 'The CLI and skills were updated, so the next control-plane step is checking that the install is healthy.',
+      },
+    },
+    error: null,
+  });
+
+  console.log = (...args) => {
+    output.push(args.join(' '));
+  };
+  console.error = (...args) => {
+    errors.push(args.join(' '));
+  };
+
+  try {
+    await routeCommand(['update']);
+  } finally {
+    router.update = originalUpdate;
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+  }
+
+  const combinedOutput = output.join('\n');
+  assert.match(combinedOutput, /Superplan update complete: main \(f00dbabe1234\)\./);
+  assert.match(combinedOutput, /Skills refreshed \(both\)\./);
+  assert.match(combinedOutput, /Next: superplan doctor --json/);
+  assert.doesNotMatch(combinedOutput, /"updated": true/);
+  assert.equal(errors.length, 0);
+});
+
 test('init asks for global install and respects the denial', async () => {
   const sandbox = await makeSandbox('superplan-init-global-denial-');
   const { routeCommand } = loadDistModule('cli/router.js', {

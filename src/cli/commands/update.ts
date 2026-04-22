@@ -24,10 +24,11 @@ interface CommandResult {
 interface UpdateDeps {
   installerPath?: string;
   readInstallMetadata?: () => Promise<InstallMetadata | null>;
-  runInstaller?: (command: string, args: string[], options: { env: NodeJS.ProcessEnv }) => Promise<CommandResult>;
+  runInstaller?: (command: string, args: string[], options: { env: NodeJS.ProcessEnv; streamOutput?: boolean }) => Promise<CommandResult>;
   refreshSkills?: () => Promise<RefreshInstalledSkillsResult>;
   resolveLatestRelease?: (repoUrl: string) => Promise<LatestReleaseInfo>;
   stopManagedProcesses?: (input: ManagedProcessTargets) => Promise<StopManagedProcessesResult>;
+  reportProgress?: (message: string) => void;
 }
 
 interface LatestReleaseInfo {
@@ -346,7 +347,11 @@ async function stopManagedProcesses(targets: ManagedProcessTargets): Promise<Sto
   };
 }
 
-async function runCommand(command: string, args: string[], options: { env: NodeJS.ProcessEnv }): Promise<CommandResult> {
+async function runCommand(
+  command: string,
+  args: string[],
+  options: { env: NodeJS.ProcessEnv; streamOutput?: boolean },
+): Promise<CommandResult> {
   return await new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: process.cwd(),
@@ -358,11 +363,19 @@ async function runCommand(command: string, args: string[], options: { env: NodeJ
     let stderr = '';
 
     child.stdout.on('data', chunk => {
-      stdout += String(chunk);
+      const text = String(chunk);
+      stdout += text;
+      if (options.streamOutput) {
+        process.stderr.write(text);
+      }
     });
 
     child.stderr.on('data', chunk => {
-      stderr += String(chunk);
+      const text = String(chunk);
+      stderr += text;
+      if (options.streamOutput) {
+        process.stderr.write(text);
+      }
     });
 
     child.on('error', reject);
@@ -412,8 +425,21 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const runner = deps.runInstaller ?? runCommand;
   const refreshSkills = deps.refreshSkills ?? refreshInstalledSkills;
   const installerLaunch = getBundledInstallerCommand();
+  const emitProgress = (message: string): void => {
+    if (options.quiet) {
+      return;
+    }
+
+    if (deps.reportProgress) {
+      deps.reportProgress(message);
+      return;
+    }
+
+    process.stderr.write(`[superplan update] ${message}\n`);
+  };
 
   try {
+    emitProgress('Checking latest available Superplan source...');
     const latestRelease = installerRefOverride
       ? {
           tag: installerRefOverride,
@@ -431,10 +457,13 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
           : ''
       )
       || '';
+    emitProgress(`Preparing update from ${ref}${latestRelease.commitish && latestRelease.commitish !== ref ? ` (${latestRelease.commitish.slice(0, 12)})` : ''}...`);
+    emitProgress('Stopping running Superplan processes...');
     const stopResult = await stopProcesses({
       installBinDir: installMetadata?.install_bin || (installPrefix ? path.join(installPrefix, 'bin') : null),
       overlayExecutablePath: installMetadata?.overlay?.executable_path || null,
     });
+    emitProgress('Running installer...');
     const installResult = await runner(installerLaunch.command, [...installerLaunch.args, installerPath], {
       env: {
         ...process.env,
@@ -447,6 +476,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
         ...(overlayInstallDir ? { SUPERPLAN_OVERLAY_INSTALL_DIR: overlayInstallDir } : {}),
         SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '0',
       },
+      streamOutput: !options.quiet,
     });
 
     if (installResult.code !== 0) {
@@ -460,6 +490,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       };
     }
 
+    emitProgress('Refreshing installed skills...');
     const refreshResult = await refreshSkills();
     if (!refreshResult.ok) {
       return {
@@ -471,6 +502,8 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
         },
       };
     }
+
+    emitProgress('Update complete.');
 
     return {
       ok: true,

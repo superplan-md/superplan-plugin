@@ -314,10 +314,6 @@ function createEmptyRuntimeState(): RuntimeState {
   };
 }
 
-function isRuntimeTaskState(value: unknown): value is RuntimeTaskState {
-  return Boolean(value && typeof value === 'object' && 'status' in value);
-}
-
 function isLegacyRuntimeState(value: unknown): value is LegacyRuntimeState {
   return Boolean(value && typeof value === 'object' && 'tasks' in value && !('changes' in value));
 }
@@ -505,23 +501,8 @@ async function readRuntimeStateForTasks(runtimeFilePath: string, tasks: ParsedTa
   return normalizedRuntime.runtimeState;
 }
 
-function getAmbiguousLegacyRuntimeError(ambiguous: Array<{ task_id: string; matches: string[] }>): TaskErrorResult {
-  const details = ambiguous
-    .map(entry => `${entry.task_id} -> ${entry.matches.join(', ')}`)
-    .join('; ');
-
-  return {
-    ok: false,
-    error: {
-      code: 'RUNTIME_CONFLICT_AMBIGUOUS_LEGACY_TASK_ID',
-      message: `Legacy bare runtime task ids are ambiguous: ${details}`,
-      retryable: false,
-    },
-  };
-}
-
 async function appendEvent(
-  eventsPath: string,
+  _eventsPath: string,
   type:
     | 'task.started'
     | 'task.completed'
@@ -1191,6 +1172,8 @@ function getInvariantError(runtimeState: RuntimeState): TaskErrorResult | undefi
       };
     }
   }
+
+  return undefined;
 }
 
 function getInProgressTaskEntries(runtimeState: RuntimeState): [string, RuntimeTaskState][] {
@@ -1552,12 +1535,6 @@ async function getMergedTasks(options?: { skipInvariant?: boolean }): Promise<{
     tasks,
     runtimeState,
   };
-}
-
-function getActiveTasks(tasks: ParsedTask[]): ParsedTask[] {
-  return tasks
-    .filter(taskItem => taskItem.status === 'in_progress')
-    .sort((left, right) => getTaskRef(left).localeCompare(getTaskRef(right)));
 }
 
 function getNextReadyTask(tasks: ParsedTask[]): ParsedTask | undefined {
