@@ -59,7 +59,24 @@ function parseGraphMetadata(content: string): GraphMetadata | null {
   const lines = content.split('\n')
 
   let currentTask: GraphTaskEntry | null = null
+  let insideCommentBlock = false
   for (const line of lines) {
+    const trimmedLine = line.trim()
+
+    if (insideCommentBlock) {
+      if (trimmedLine.includes('-->')) {
+        insideCommentBlock = false
+      }
+      continue
+    }
+
+    if (trimmedLine.startsWith('<!--')) {
+      if (!trimmedLine.includes('-->')) {
+        insideCommentBlock = true
+      }
+      continue
+    }
+
     // Task header: `- `T-xxx` Title`
     const taskHeaderMatch = /^\s*-\s*`(T-[A-Za-z0-9]+)`\s+(.+)/.exec(line)
     if (taskHeaderMatch) {
