@@ -102,6 +102,26 @@ function printHumanSuccess(command: string, result: CommandResult): boolean {
       return true;
     }
   }
+
+  if (command === "update" && data?.updated) {
+    const ref = typeof data.ref === 'string' && data.ref.trim().length > 0 ? data.ref.trim() : 'latest';
+    const commitish = typeof data.commitish === 'string' ? data.commitish.trim() : '';
+    const commitSuffix = commitish && commitish !== ref ? ` (${commitish.slice(0, 12)})` : '';
+    console.log(`Superplan update complete: ${ref}${commitSuffix}.`);
+
+    if (data.skills_refreshed === true && typeof data.skills_scope === 'string' && data.skills_scope !== 'skip') {
+      console.log(`Skills refreshed (${data.skills_scope}).`);
+    }
+
+    if (data.next_action?.type === 'command' && data.next_action.command) {
+      console.log(`Next: ${data.next_action.command}`);
+    } else if (data.next_action?.type === 'stop' && data.next_action.outcome) {
+      console.log(data.next_action.outcome);
+    }
+
+    return true;
+  }
+
   return false;
 }
 
