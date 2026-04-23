@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const {
@@ -13,6 +14,9 @@ const {
 test('update reruns the bundled installer with recorded install metadata', async () => {
   const sandbox = await makeSandbox('superplan-update-remote-');
   const metadataPath = path.join(sandbox.home, '.config', 'superplan', 'install.json');
+  const overlaySourcePath = path.join(sandbox.root, 'overlay-bin');
+
+  await fs.mkdir(overlaySourcePath, { recursive: true });
 
   await writeJson(metadataPath, {
     install_method: 'remote_repo',
@@ -21,7 +25,7 @@ test('update reruns the bundled installer with recorded install metadata', async
     install_prefix: path.join(sandbox.root, 'prefix'),
     overlay: {
       install_method: 'copied_prebuilt',
-      source_path: path.join(sandbox.root, 'overlay-bin'),
+      source_path: overlaySourcePath,
       install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
       install_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'overlay-bin'),
       executable_path: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay', 'overlay-bin'),
@@ -87,7 +91,7 @@ test('update reruns the bundled installer with recorded install metadata', async
     assert.equal(calls[0].env.SUPERPLAN_REPO_URL, 'https://github.com/example/custom-superplan.git');
     assert.equal(calls[0].env.SUPERPLAN_REF, 'release');
     assert.equal(calls[0].env.SUPERPLAN_INSTALL_PREFIX, path.join(sandbox.root, 'prefix'));
-    assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, path.join(sandbox.root, 'overlay-bin'));
+    assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, overlaySourcePath);
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_INSTALL_DIR, path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'));
     assert.equal(calls[0].env.SUPERPLAN_RUN_SETUP_AFTER_INSTALL, '0');
     assert.equal(calls[0].streamOutput, false);
@@ -192,6 +196,70 @@ test('update resolves and installs the latest published release before refreshin
   });
 });
 
+test('update falls back to the installed overlay bundle when a copied prebuilt source path is stale', async () => {
+  const sandbox = await makeSandbox('superplan-update-overlay-fallback-');
+  const installedOverlayPath = path.join(
+    sandbox.home,
+    '.local',
+    'share',
+    'superplan',
+    'overlay',
+    'Superplan.app',
+  );
+
+  await fs.mkdir(installedOverlayPath, { recursive: true });
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+    const calls = [];
+
+    const result = await update({ json: true, quiet: true }, {
+      readInstallMetadata: async () => ({
+        install_method: 'remote_repo',
+        repo_url: 'https://github.com/example/custom-superplan.git',
+        ref: 'main',
+        install_prefix: path.join(sandbox.root, 'prefix'),
+        overlay: {
+          install_method: 'copied_prebuilt',
+          source_path: path.join(sandbox.root, 'missing-overlay.tar.gz'),
+          install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
+          install_path: installedOverlayPath,
+          executable_path: path.join(installedOverlayPath, 'Contents', 'MacOS', 'Superplan'),
+        },
+      }),
+      resolveLatestRelease: async () => ({
+        tag: 'main',
+        commitish: 'f00dbabe1234567890abcdef1234567890abcd',
+        url: 'https://github.com/example/custom-superplan/commit/f00dbabe1234567890abcdef1234567890abcd',
+      }),
+      stopManagedProcesses: async () => ({
+        stopped: [],
+      }),
+      runInstaller: async (command, args, options) => {
+        calls.push({ command, args, env: options.env, streamOutput: options.streamOutput });
+        return {
+          code: 0,
+          stdout: 'Installed Superplan',
+          stderr: '',
+        };
+      },
+      refreshSkills: async () => ({
+        ok: true,
+        data: {
+          scope: 'skip',
+          refreshed: false,
+          agents: [],
+          verified: true,
+        },
+      }),
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].env.SUPERPLAN_OVERLAY_SOURCE_PATH, installedOverlayPath);
+  });
+});
+
 test('update emits progress messages and streams installer output when not quiet', async () => {
   const sandbox = await makeSandbox('superplan-update-progress-');
 
@@ -257,16 +325,16 @@ test('update renders an in-place progress bar on interactive terminals', async (
   await withSandboxEnv(sandbox, async () => {
     const { update } = loadDistModule('cli/commands/update.js');
     const calls = [];
-    let stderrOutput = '';
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    const originalIsTTY = process.stderr.isTTY;
+    let stdoutOutput = '';
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    const originalIsTTY = process.stdout.isTTY;
 
-    Object.defineProperty(process.stderr, 'isTTY', {
+    Object.defineProperty(process.stdout, 'isTTY', {
       configurable: true,
       value: true,
     });
-    process.stderr.write = ((chunk) => {
-      stderrOutput += String(chunk);
+    process.stdout.write = ((chunk) => {
+      stdoutOutput += String(chunk);
       return true;
     });
 
@@ -308,14 +376,14 @@ test('update renders an in-place progress bar on interactive terminals', async (
       assert.equal(result.ok, true);
       assert.equal(calls.length, 1);
       assert.equal(calls[0].streamOutput, false);
-      assert.match(stderrOutput, /\[##------------------\]\s+10% Checking latest available Superplan source\.\.\./);
-      assert.match(stderrOutput, /\[#############-------\]\s+65% Running installer\.\.\./);
-      assert.match(stderrOutput, /\[####################\]\s+100% Update complete\./);
-      assert.match(stderrOutput, /\r/);
-      assert.match(stderrOutput, /\n$/);
+      assert.match(stdoutOutput, /\[##------------------\]\s+10% Checking latest available Superplan source\.\.\./);
+      assert.match(stdoutOutput, /\[#############-------\]\s+65% Running installer\.\.\./);
+      assert.match(stdoutOutput, /\[####################\]\s+100% Update complete\./);
+      assert.match(stdoutOutput, /\r/);
+      assert.match(stdoutOutput, /\n$/);
     } finally {
-      process.stderr.write = originalWrite;
-      Object.defineProperty(process.stderr, 'isTTY', {
+      process.stdout.write = originalWrite;
+      Object.defineProperty(process.stdout, 'isTTY', {
         configurable: true,
         value: originalIsTTY,
       });

@@ -83,6 +83,27 @@ export type UpdateResult =
       };
     };
 
+async function resolveReusableOverlaySourcePath(
+  overlayMetadata: InstallMetadata['overlay'] | null | undefined,
+): Promise<string> {
+  if (!overlayMetadata || overlayMetadata.install_method !== 'copied_prebuilt') {
+    return '';
+  }
+
+  const candidates = [
+    overlayMetadata.source_path?.trim() || '',
+    overlayMetadata.install_path?.trim() || '',
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return '';
+}
+
 async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
@@ -471,8 +492,9 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const runner = deps.runInstaller ?? runCommand;
   const refreshSkills = deps.refreshSkills ?? refreshInstalledSkills;
   const installerLaunch = getBundledInstallerCommand();
-  const progressWriter = createProgressWriter(process.stderr);
-  const useInteractiveProgressBar = !options.quiet && !deps.reportProgress && Boolean(process.stderr.isTTY);
+  const progressOutput = options.json ? process.stderr : process.stdout;
+  const progressWriter = createProgressWriter(progressOutput);
+  const useInteractiveProgressBar = !options.quiet && !deps.reportProgress && Boolean(progressOutput.isTTY);
   const emitProgress = (progressPercent: number, message: string, done = false): void => {
     if (options.quiet) {
       return;
@@ -492,7 +514,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       return;
     }
 
-    process.stderr.write(`${formatProgressMessage(progressPercent, message)}\n`);
+    progressOutput.write(`${formatProgressMessage(progressPercent, message)}\n`);
   };
 
   try {
@@ -508,11 +530,7 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
     const overlayReleaseBaseUrl = process.env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL
       || (isMovingRef(ref) ? '' : buildReleaseBaseUrl(repoUrl, ref));
     const overlaySourcePath = process.env.SUPERPLAN_OVERLAY_SOURCE_PATH
-      || (
-        installMetadata?.overlay?.install_method === 'copied_prebuilt'
-          ? installMetadata?.overlay?.source_path
-          : ''
-      )
+      || await resolveReusableOverlaySourcePath(installMetadata?.overlay)
       || '';
     emitProgress(25, `Preparing update from ${ref}${latestRelease.commitish && latestRelease.commitish !== ref ? ` (${latestRelease.commitish.slice(0, 12)})` : ''}...`);
     emitProgress(40, 'Stopping running Superplan processes...');
