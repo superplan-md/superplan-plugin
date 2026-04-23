@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const fs = require('node:fs/promises');
+const https = require('node:https');
 const path = require('node:path');
 
 const {
@@ -193,6 +195,96 @@ test('update resolves and installs the latest published release before refreshin
     assert.equal(calls[0].env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL, 'https://github.com/example/custom-superplan/releases/download/alpha.14');
     assert.equal(calls[0].env.SUPERPLAN_LATEST_COMMITISH, 'bea27a2c63f941a99fa6b8afa55348054130fb6f');
     assert.equal(calls[0].streamOutput, false);
+  });
+});
+
+test('update resolves the latest alpha release by default for alpha installs', async () => {
+  const sandbox = await makeSandbox('superplan-update-default-alpha-track-');
+
+  await withSandboxEnv(sandbox, async () => {
+    const { update } = loadDistModule('cli/commands/update.js');
+    const calls = [];
+    const requestPaths = [];
+    const originalGet = https.get;
+
+    https.get = (options, handler) => {
+      requestPaths.push(options.path);
+
+      const request = new EventEmitter();
+      process.nextTick(() => {
+        const response = new EventEmitter();
+        response.statusCode = 200;
+        response.setEncoding = () => {};
+        handler(response);
+        response.emit('data', JSON.stringify([
+          {
+            tag_name: 'alpha.14',
+            html_url: 'https://github.com/example/custom-superplan/releases/tag/alpha.14',
+            target_commitish: 'oldalpha',
+          },
+          {
+            tag_name: 'alpha.16',
+            html_url: 'https://github.com/example/custom-superplan/releases/tag/alpha.16',
+            target_commitish: 'newalpha',
+          },
+          {
+            tag_name: 'v1.0.0',
+            html_url: 'https://github.com/example/custom-superplan/releases/tag/v1.0.0',
+            target_commitish: 'stable',
+          },
+        ]));
+        response.emit('end');
+      });
+
+      return request;
+    };
+
+    try {
+      const result = await update({ json: true, quiet: true }, {
+        readInstallMetadata: async () => ({
+          install_method: 'remote_repo',
+          repo_url: 'https://github.com/example/custom-superplan.git',
+          ref: 'alpha.12',
+          install_prefix: path.join(sandbox.root, 'prefix'),
+          overlay: {
+            install_method: 'downloaded_prebuilt',
+            release_base_url: 'https://github.com/example/custom-superplan/releases/download/alpha.12',
+            install_dir: path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay'),
+          },
+        }),
+        runInstaller: async (command, args, options) => {
+          calls.push({ command, args, env: options.env, streamOutput: options.streamOutput });
+          return {
+            code: 0,
+            stdout: 'Installed Superplan',
+            stderr: '',
+          };
+        },
+        stopManagedProcesses: async () => ({
+          stopped: [],
+        }),
+        refreshSkills: async () => ({
+          ok: true,
+          data: {
+            scope: 'skip',
+            refreshed: false,
+            agents: [],
+            verified: true,
+          },
+        }),
+      });
+
+      assert.equal(result.ok, true);
+      assert.equal(result.data.ref, 'alpha.16');
+      assert.equal(result.data.commitish, 'newalpha');
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].env.SUPERPLAN_REF, 'alpha.16');
+      assert.equal(calls[0].env.SUPERPLAN_LATEST_COMMITISH, 'newalpha');
+      assert.equal(calls[0].env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL, 'https://github.com/example/custom-superplan/releases/download/alpha.16');
+      assert.deepEqual(requestPaths, ['/repos/example/custom-superplan/releases?per_page=100']);
+    } finally {
+      https.get = originalGet;
+    }
   });
 });
 

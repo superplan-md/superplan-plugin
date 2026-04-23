@@ -9,6 +9,7 @@ import { commandNextAction, type NextAction } from '../next-action';
 const DEFAULT_REPO_URL = 'https://github.com/superplan-md/superplan-plugin.git';
 const DEFAULT_REF = 'main';
 const MOVING_REFS = new Set(['main', 'dev']);
+const ALPHA_REF_PATTERN = /^alpha\.(\d+)$/i;
 
 interface UpdateOptions {
   json?: boolean;
@@ -26,7 +27,7 @@ interface UpdateDeps {
   readInstallMetadata?: () => Promise<InstallMetadata | null>;
   runInstaller?: (command: string, args: string[], options: { env: NodeJS.ProcessEnv; streamOutput?: boolean }) => Promise<CommandResult>;
   refreshSkills?: () => Promise<RefreshInstalledSkillsResult>;
-  resolveLatestRelease?: (repoUrl: string) => Promise<LatestReleaseInfo>;
+  resolveLatestRelease?: (repoUrl: string, ref: string) => Promise<LatestReleaseInfo>;
   stopManagedProcesses?: (input: ManagedProcessTargets) => Promise<StopManagedProcessesResult>;
   reportProgress?: (message: string) => void;
 }
@@ -142,6 +143,10 @@ function isMovingRef(ref: string): boolean {
   return MOVING_REFS.has(ref);
 }
 
+function isAlphaRef(ref: string): boolean {
+  return ALPHA_REF_PATTERN.test(ref);
+}
+
 function parseGitHubRepo(repoUrl: string): { owner: string; repo: string } | null {
   const sshMatch = repoUrl.match(/^git@github\.com:([^/]+)\/([^/]+?)(?:\.git)?$/i);
   if (sshMatch) {
@@ -171,14 +176,16 @@ function parseGitHubRepo(repoUrl: string): { owner: string; repo: string } | nul
   }
 }
 
-async function resolveLatestCommitFromGitHub(repoUrl: string, branch: string): Promise<LatestReleaseInfo> {
+function requireGitHubRepo(repoUrl: string, lookupKind: string): { owner: string; repo: string } {
   const parsedRepo = parseGitHubRepo(repoUrl);
   if (!parsedRepo) {
-    throw new Error(`Latest commit lookup only supports GitHub repo URLs: ${repoUrl}`);
+    throw new Error(`${lookupKind} only supports GitHub repo URLs: ${repoUrl}`);
   }
 
-  const requestPath = `/repos/${parsedRepo.owner}/${parsedRepo.repo}/commits/${branch}`;
+  return parsedRepo;
+}
 
+async function requestGitHubJson<T>(requestPath: string, lookupKind: string): Promise<T> {
   const payload = await new Promise<string>((resolve, reject) => {
     const request = https.get({
       hostname: 'api.github.com',
@@ -195,7 +202,7 @@ async function resolveLatestCommitFromGitHub(repoUrl: string, branch: string): P
       });
       response.on('end', () => {
         if ((response.statusCode ?? 500) >= 400) {
-          reject(new Error(`GitHub latest commit lookup failed with status ${response.statusCode}`));
+          reject(new Error(`${lookupKind} failed with status ${response.statusCode}`));
           return;
         }
         resolve(body);
@@ -205,10 +212,16 @@ async function resolveLatestCommitFromGitHub(repoUrl: string, branch: string): P
     request.on('error', reject);
   });
 
-  const parsed = JSON.parse(payload) as {
+  return JSON.parse(payload) as T;
+}
+
+async function resolveLatestCommitFromGitHub(repoUrl: string, branch: string): Promise<LatestReleaseInfo> {
+  const parsedRepo = requireGitHubRepo(repoUrl, 'Latest commit lookup');
+  const requestPath = `/repos/${parsedRepo.owner}/${parsedRepo.repo}/commits/${branch}`;
+  const parsed = await requestGitHubJson<{
     sha?: string;
     html_url?: string;
-  };
+  }>(requestPath, 'GitHub latest commit lookup');
   const commitish = parsed.sha?.trim();
   const url = parsed.html_url?.trim();
 
@@ -221,6 +234,84 @@ async function resolveLatestCommitFromGitHub(repoUrl: string, branch: string): P
     commitish,
     url,
   };
+}
+
+async function resolveLatestPublishedReleaseFromGitHub(repoUrl: string): Promise<LatestReleaseInfo> {
+  const parsedRepo = requireGitHubRepo(repoUrl, 'Latest release lookup');
+  const parsed = await requestGitHubJson<{
+    tag_name?: string;
+    html_url?: string;
+  }>(`/repos/${parsedRepo.owner}/${parsedRepo.repo}/releases/latest`, 'GitHub latest release lookup');
+
+  const tag = parsed.tag_name?.trim();
+  const url = parsed.html_url?.trim();
+  if (!tag || !url) {
+    throw new Error('GitHub latest release response was missing tag_name or html_url');
+  }
+
+  return {
+    tag,
+    commitish: tag,
+    url,
+  };
+}
+
+async function resolveLatestAlphaReleaseFromGitHub(repoUrl: string): Promise<LatestReleaseInfo> {
+  const parsedRepo = requireGitHubRepo(repoUrl, 'Latest release lookup');
+  const parsed = await requestGitHubJson<Array<{
+    tag_name?: string;
+    html_url?: string;
+    target_commitish?: string;
+    draft?: boolean;
+  }>>(`/repos/${parsedRepo.owner}/${parsedRepo.repo}/releases?per_page=100`, 'GitHub latest release lookup');
+
+  const latestAlpha = parsed
+    .map(release => {
+      const tag = String(release.tag_name || '').trim();
+      const match = tag.match(ALPHA_REF_PATTERN);
+      const url = String(release.html_url || '').trim();
+      if (!match || !url || release.draft) {
+        return null;
+      }
+
+      return {
+        tag,
+        url,
+        alphaNumber: Number(match[1]),
+        targetCommitish: String(release.target_commitish || '').trim(),
+      };
+    })
+    .filter((release): release is {
+      tag: string;
+      url: string;
+      alphaNumber: number;
+      targetCommitish: string;
+    } => Boolean(release))
+    .sort((left, right) => right.alphaNumber - left.alphaNumber)[0];
+
+  if (!latestAlpha) {
+    throw new Error('GitHub latest release lookup found no alpha releases');
+  }
+
+  return {
+    tag: latestAlpha.tag,
+    commitish: latestAlpha.targetCommitish || latestAlpha.tag,
+    url: latestAlpha.url,
+  };
+}
+
+export async function resolveLatestReleaseForRef(repoUrl: string, ref: string): Promise<LatestReleaseInfo> {
+  const normalizedRef = ref.trim() || DEFAULT_REF;
+
+  if (isMovingRef(normalizedRef)) {
+    return await resolveLatestCommitFromGitHub(repoUrl, normalizedRef);
+  }
+
+  if (isAlphaRef(normalizedRef)) {
+    return await resolveLatestAlphaReleaseFromGitHub(repoUrl);
+  }
+
+  return await resolveLatestPublishedReleaseFromGitHub(repoUrl);
 }
 
 function matchesManagedCommand(command: string, needle: string): boolean {
@@ -486,7 +577,8 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
   const repoUrl = process.env.SUPERPLAN_REPO_URL || installMetadata?.repo_url || DEFAULT_REPO_URL;
   const installPrefix = process.env.SUPERPLAN_INSTALL_PREFIX || installMetadata?.install_prefix || '';
   const installerRefOverride = process.env.SUPERPLAN_REF;
-  const resolveLatestRelease = deps.resolveLatestRelease ?? ((url: string) => resolveLatestCommitFromGitHub(url, DEFAULT_REF));
+  const currentRef = installerRefOverride || installMetadata?.ref || DEFAULT_REF;
+  const resolveLatestRelease = deps.resolveLatestRelease ?? ((url: string, ref: string) => resolveLatestReleaseForRef(url, ref));
   const stopProcesses = deps.stopManagedProcesses ?? stopManagedProcesses;
   const overlayInstallDir = process.env.SUPERPLAN_OVERLAY_INSTALL_DIR || installMetadata?.overlay?.install_dir || '';
   const runner = deps.runInstaller ?? runCommand;
@@ -525,8 +617,8 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
           commitish: installerRefOverride,
           url: `${repoUrl.replace(/\.git$/, '')}/releases/tag/${installerRefOverride}`,
         }
-      : await resolveLatestRelease(repoUrl);
-    const ref = latestRelease.tag || installMetadata?.ref || DEFAULT_REF;
+      : await resolveLatestRelease(repoUrl, currentRef);
+    const ref = latestRelease.tag || currentRef;
     const overlayReleaseBaseUrl = process.env.SUPERPLAN_OVERLAY_RELEASE_BASE_URL
       || (isMovingRef(ref) ? '' : buildReleaseBaseUrl(repoUrl, ref));
     const overlaySourcePath = process.env.SUPERPLAN_OVERLAY_SOURCE_PATH
@@ -600,7 +692,8 @@ export async function update(options: UpdateOptions = {}, deps: Partial<UpdateDe
       },
     };
   } catch (error: any) {
-    if (String(error?.message || '').includes('latest commit')) {
+    const errorMessage = String(error?.message || '');
+    if (errorMessage.includes('latest commit') || errorMessage.includes('latest release')) {
       return {
         ok: false,
         error: {
