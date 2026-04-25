@@ -55,6 +55,8 @@ superplan init
 
 ![Agent Selection](src/assets/agent_selection.png)
 
+![Superplan Overlay](src/assets/superplan_overlay.png)
+
 ---
 
 ## How it works
