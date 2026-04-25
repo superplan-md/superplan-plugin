@@ -368,6 +368,26 @@ resolve_overlay_executable_path() {
   find "$install_path" -maxdepth 2 -type f -perm -u+x 2>/dev/null | sort | head -n 1
 }
 
+canonical_existing_path() {
+  target_path="$1"
+
+  if [ -d "$target_path" ]; then
+    (
+      cd "$target_path" >/dev/null 2>&1 || exit 1
+      pwd -P
+    )
+    return $?
+  fi
+
+  if [ -e "$target_path" ]; then
+    target_dir="$(cd "$(dirname "$target_path")" >/dev/null 2>&1 && pwd -P)" || return 1
+    printf '%s/%s\n' "$target_dir" "$(basename "$target_path")"
+    return 0
+  fi
+
+  return 1
+}
+
 list_overlay_process_ids() {
   target_executable_path="$1"
   [ -n "$target_executable_path" ] || return 0
@@ -460,9 +480,22 @@ install_overlay_companion() {
   else
     overlay_name="$(basename "$SUPERPLAN_OVERLAY_SOURCE_PATH")"
     OVERLAY_INSTALL_PATH="$SUPERPLAN_OVERLAY_INSTALL_DIR/$overlay_name"
+    source_path_to_copy="$SUPERPLAN_OVERLAY_SOURCE_PATH"
+    source_canonical_path="$(canonical_existing_path "$SUPERPLAN_OVERLAY_SOURCE_PATH" 2>/dev/null || true)"
+    install_canonical_path="$(canonical_existing_path "$OVERLAY_INSTALL_PATH" 2>/dev/null || true)"
+
+    if [ -n "$source_canonical_path" ] && [ "$source_canonical_path" = "$install_canonical_path" ]; then
+      staged_overlay_source_root="$WORK_DIR/overlay-companion-source"
+      staged_overlay_source_path="$staged_overlay_source_root/$overlay_name"
+      rm -rf "$staged_overlay_source_path"
+      mkdir -p "$staged_overlay_source_root"
+      cp -R "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$staged_overlay_source_path"
+      source_path_to_copy="$staged_overlay_source_path"
+    fi
+
     stop_running_overlay_companion "$OVERLAY_INSTALL_PATH"
     rm -rf "$OVERLAY_INSTALL_PATH"
-    cp -R "$SUPERPLAN_OVERLAY_SOURCE_PATH" "$OVERLAY_INSTALL_PATH"
+    cp -R "$source_path_to_copy" "$OVERLAY_INSTALL_PATH"
   fi
 
   OVERLAY_EXECUTABLE_PATH="$(resolve_overlay_executable_path "$OVERLAY_INSTALL_PATH")"

@@ -148,6 +148,44 @@ test('install script records and installs a bundled overlay companion when one i
   );
 });
 
+test('install script can reinstall the overlay companion when the source path is the installed app bundle itself', async () => {
+  const sandbox = await makeSandbox('superplan-install-overlay-self-copy-');
+  const prefixDir = path.join(sandbox.root, 'prefix');
+  const overlayInstallDir = path.join(sandbox.home, '.local', 'share', 'superplan', 'overlay');
+  const overlaySourcePath = path.join(overlayInstallDir, 'Superplan.app');
+  const overlayExecutablePath = path.join(overlaySourcePath, 'Contents', 'MacOS', 'Superplan');
+
+  await fs.mkdir(prefixDir, { recursive: true });
+  await fs.mkdir(path.dirname(overlayExecutablePath), { recursive: true });
+  await fs.writeFile(overlayExecutablePath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+
+  const installResult = await runCommand('sh', [path.join(REPO_ROOT, 'scripts', 'install.sh')], {
+    cwd: sandbox.cwd,
+    env: {
+      ...process.env,
+      HOME: sandbox.home,
+      SUPERPLAN_SOURCE_DIR: REPO_ROOT,
+      SUPERPLAN_INSTALL_PREFIX: prefixDir,
+      SUPERPLAN_OVERLAY_SOURCE_PATH: overlaySourcePath,
+      SUPERPLAN_ENABLE_OVERLAY: '1',
+      SUPERPLAN_RUN_SETUP_AFTER_INSTALL: '0',
+    },
+  });
+
+  assert.equal(installResult.code, 0, installResult.stderr || installResult.stdout);
+  assert.match(installResult.stdout, /Installed Superplan overlay to/);
+  assert.equal(await fs.stat(overlayExecutablePath).then(() => true, () => false), true);
+
+  const installMetadata = JSON.parse(await fs.readFile(
+    path.join(sandbox.home, '.config', 'superplan', 'install.json'),
+    'utf-8',
+  ));
+
+  assert.equal(installMetadata.overlay.install_method, 'copied_prebuilt');
+  assert.equal(installMetadata.overlay.install_path, overlaySourcePath);
+  assert.equal(installMetadata.overlay.executable_path, overlayExecutablePath);
+});
+
 test('install script skips setup cleanly when requested and ends with a clear next step', async () => {
   const sandbox = await makeSandbox('superplan-install-no-setup-');
   const prefixDir = path.join(sandbox.root, 'prefix');

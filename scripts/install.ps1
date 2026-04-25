@@ -293,16 +293,34 @@ function Install-OverlayCompanion {
     return
   }
 
-  if (-not (Test-Path -LiteralPath $SuperplanOverlaySourcePath -PathType Leaf)) {
+  if (-not (Test-Path -LiteralPath $SuperplanOverlaySourcePath)) {
     Fail "SUPERPLAN_OVERLAY_SOURCE_PATH does not exist: $SuperplanOverlaySourcePath"
   }
 
   New-Item -ItemType Directory -Force -Path $SuperplanOverlayInstallDir | Out-Null
   $overlayName = Split-Path -Path $SuperplanOverlaySourcePath -Leaf
   $script:OverlayInstallPath = Join-Path $SuperplanOverlayInstallDir $overlayName
+  $sourcePathToCopy = $SuperplanOverlaySourcePath
 
-  Remove-Item -LiteralPath $script:OverlayInstallPath -Force -ErrorAction SilentlyContinue
-  Copy-Item -LiteralPath $SuperplanOverlaySourcePath -Destination $script:OverlayInstallPath -Force
+  if (Test-Path -LiteralPath $script:OverlayInstallPath) {
+    try {
+      $sourceResolvedPath = (Get-Item -LiteralPath $SuperplanOverlaySourcePath -Force).FullName
+      $targetResolvedPath = (Get-Item -LiteralPath $script:OverlayInstallPath -Force).FullName
+      if ($sourceResolvedPath -eq $targetResolvedPath) {
+        $stagedOverlayRoot = Join-Path $workDir 'overlay-companion-source'
+        $stagedOverlayPath = Join-Path $stagedOverlayRoot $overlayName
+        Remove-Item -LiteralPath $stagedOverlayPath -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $stagedOverlayRoot | Out-Null
+        Copy-Item -LiteralPath $SuperplanOverlaySourcePath -Destination $stagedOverlayPath -Recurse -Force
+        $sourcePathToCopy = $stagedOverlayPath
+      }
+    } catch {
+      $sourcePathToCopy = $SuperplanOverlaySourcePath
+    }
+  }
+
+  Remove-Item -LiteralPath $script:OverlayInstallPath -Recurse -Force -ErrorAction SilentlyContinue
+  Copy-Item -LiteralPath $sourcePathToCopy -Destination $script:OverlayInstallPath -Recurse -Force
   $script:OverlayExecutablePath = $script:OverlayInstallPath
 }
 
