@@ -18,6 +18,10 @@ $OverlayExecutablePath = ''
 $OverlayArtifactName = ''
 $OverlayPlatform = ''
 $OverlayArch = ''
+$NodeCommand = 'node'
+$NpmCommand = 'npm'
+$BundledNodeRuntimeRoot = Join-Path $HOME '.config\superplan\node-runtime'
+$UsingBundledNodeRuntime = $false
 $SetupCompleted = $false
 $OriginalLocation = Get-Location
 
@@ -61,8 +65,17 @@ function Invoke-QuietCommand {
   )
 
   $logPath = Join-Path $workDir "$Label.log"
+  $previousErrorActionPreference = $ErrorActionPreference
+  $nativePreferenceVariable = Get-Variable -Name PSNativeCommandUseErrorActionPreference -Scope Global -ErrorAction SilentlyContinue
+  $previousNativeErrorPreference = $null
 
   try {
+    $script:ErrorActionPreference = 'Continue'
+    if ($nativePreferenceVariable) {
+      $previousNativeErrorPreference = $global:PSNativeCommandUseErrorActionPreference
+      $global:PSNativeCommandUseErrorActionPreference = $false
+    }
+
     & $Command *> $logPath
     if ($LASTEXITCODE -ne 0) {
       if (Test-Path -LiteralPath $logPath) {
@@ -71,6 +84,10 @@ function Invoke-QuietCommand {
       Fail "$Label failed"
     }
   } finally {
+    $script:ErrorActionPreference = $previousErrorActionPreference
+    if ($nativePreferenceVariable) {
+      $global:PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
+    }
     Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
   }
 }
@@ -153,6 +170,116 @@ function Parse-GitHubRepo {
   }
 }
 
+function Resolve-WindowsArch {
+  $rawArch = [string] $env:PROCESSOR_ARCHITECTURE
+  if ([string]::IsNullOrWhiteSpace($rawArch)) {
+    return 'x64'
+  }
+
+  switch -Regex ($rawArch.ToLowerInvariant()) {
+    '^(amd64|x86_64)$' { return 'x64' }
+    '^(arm64|aarch64)$' { return 'arm64' }
+    '^x86$' { return 'x86' }
+    default { return 'x64' }
+  }
+}
+
+function Resolve-BundledNodeRuntimeHome {
+  if (-not (Test-Path -LiteralPath $BundledNodeRuntimeRoot -PathType Container)) {
+    return $null
+  }
+
+  $directNodePath = Join-Path $BundledNodeRuntimeRoot 'node.exe'
+  $directNpmPath = Join-Path $BundledNodeRuntimeRoot 'npm.cmd'
+  if ((Test-Path -LiteralPath $directNodePath -PathType Leaf) -and (Test-Path -LiteralPath $directNpmPath -PathType Leaf)) {
+    return $BundledNodeRuntimeRoot
+  }
+
+  $nodeHomes = Get-ChildItem -LiteralPath $BundledNodeRuntimeRoot -Directory -ErrorAction SilentlyContinue |
+    Sort-Object Name -Descending
+
+  foreach ($nodeHome in $nodeHomes) {
+    $candidateNodePath = Join-Path $nodeHome.FullName 'node.exe'
+    $candidateNpmPath = Join-Path $nodeHome.FullName 'npm.cmd'
+    if ((Test-Path -LiteralPath $candidateNodePath -PathType Leaf) -and (Test-Path -LiteralPath $candidateNpmPath -PathType Leaf)) {
+      return $nodeHome.FullName
+    }
+  }
+
+  return $null
+}
+
+function Use-BundledNodeRuntime {
+  param([string] $NodeHome)
+
+  $script:NodeCommand = Join-Path $NodeHome 'node.exe'
+  $script:NpmCommand = Join-Path $NodeHome 'npm.cmd'
+  $script:UsingBundledNodeRuntime = $true
+  $env:PATH = "$NodeHome;$($env:PATH)"
+}
+
+function Ensure-NodeToolchain {
+  if ((Get-Command node -ErrorAction SilentlyContinue) -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+    $script:NodeCommand = 'node'
+    $script:NpmCommand = 'npm'
+    $script:UsingBundledNodeRuntime = $false
+    return
+  }
+
+  $existingBundledNodeHome = Resolve-BundledNodeRuntimeHome
+  if (-not [string]::IsNullOrWhiteSpace($existingBundledNodeHome)) {
+    Say "Using bundled Superplan Node runtime from $existingBundledNodeHome"
+    Use-BundledNodeRuntime -NodeHome $existingBundledNodeHome
+    return
+  }
+
+  $portableRoot = Join-Path $workDir 'node-portable'
+  $archivePath = Join-Path $workDir 'node-portable.zip'
+  $latestTrackUrl = 'https://nodejs.org/dist/latest-v20.x/SHASUMS256.txt'
+  $nodeArch = Resolve-WindowsArch
+
+  Say 'Node.js not found on PATH. Bootstrapping a portable Node runtime for installation.'
+  $checksums = (Invoke-WebRequest -UseBasicParsing -Uri $latestTrackUrl).Content
+  $archiveName = $null
+  foreach ($line in ($checksums -split "`r?`n")) {
+    if ($line -match ("node-v20\.[^\s]+-win-{0}\.zip" -f [regex]::Escape($nodeArch))) {
+      $archiveName = $Matches[0]
+      break
+    }
+  }
+
+  if ([string]::IsNullOrWhiteSpace($archiveName)) {
+    Fail "failed to resolve a portable Node.js archive for Windows $nodeArch"
+  }
+
+  $downloadUrl = "https://nodejs.org/dist/latest-v20.x/$archiveName"
+  Say "Downloading portable Node.js from $downloadUrl"
+  Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archivePath
+
+  New-Item -ItemType Directory -Force -Path $portableRoot | Out-Null
+  Expand-Archive -Path $archivePath -DestinationPath $portableRoot -Force
+
+  $downloadedNodeHome = Get-ChildItem -LiteralPath $portableRoot -Directory | Select-Object -First 1
+  if (-not $downloadedNodeHome) {
+    Fail 'failed to extract portable Node.js runtime'
+  }
+
+  Say "Persisting bundled Superplan Node runtime to $BundledNodeRuntimeRoot"
+  Remove-Item -LiteralPath $BundledNodeRuntimeRoot -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $BundledNodeRuntimeRoot | Out-Null
+  Get-ChildItem -LiteralPath $portableRoot -Force | ForEach-Object {
+    $targetPath = Join-Path $BundledNodeRuntimeRoot $_.Name
+    Copy-Item -LiteralPath $_.FullName -Destination $targetPath -Recurse -Force
+  }
+
+  $bundledNodeHome = Resolve-BundledNodeRuntimeHome
+  if ([string]::IsNullOrWhiteSpace($bundledNodeHome)) {
+    Fail 'bootstrapped portable Node.js runtime could not be persisted'
+  }
+
+  Use-BundledNodeRuntime -NodeHome $bundledNodeHome
+}
+
 function Resolve-LatestReleaseTagFromGitHub {
   $repo = Parse-GitHubRepo $SuperplanRepoUrl
   if (-not $repo) {
@@ -226,16 +353,46 @@ function Resolve-OverlayReleaseBaseUrl {
 function Resolve-OverlayReleaseTarget {
   param([string] $SourceWorktree)
 
-  $overlayScriptPath = Join-Path $SourceWorktree 'scripts/overlay-release.js'
-  $targetJson = & node $overlayScriptPath target --platform win32 --arch $env:PROCESSOR_ARCHITECTURE 2>$null
-  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($targetJson)) {
-    Fail 'failed to resolve packaged overlay target for Windows'
+  $script:OverlayPlatform = 'windows'
+  $script:OverlayArch = Resolve-WindowsArch
+  $script:OverlayArtifactName = "superplan-overlay-windows-$($script:OverlayArch).exe"
+}
+
+function Download-GitHubSourceSnapshot {
+  param(
+    [string] $RepoUrl,
+    [string] $Ref,
+    [string] $DestinationDir,
+    [string] $WorkDir
+  )
+
+  $repo = Parse-GitHubRepo $RepoUrl
+  if (-not $repo) {
+    return $false
   }
 
-  $parsed = $targetJson | ConvertFrom-Json
-  $script:OverlayPlatform = [string] $parsed.platform
-  $script:OverlayArch = [string] $parsed.arch
-  $script:OverlayArtifactName = [string] $parsed.artifactName
+  $archivePath = Join-Path $WorkDir 'superplan-source.zip'
+  $extractDir = Join-Path $WorkDir 'source-extract'
+  $downloadUrl = "https://codeload.github.com/$($repo.owner)/$($repo.repo)/zip/$Ref"
+
+  Say "Downloading Superplan source archive from $downloadUrl"
+  Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $archivePath
+
+  New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
+  Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
+
+  $archiveRoot = Get-ChildItem -LiteralPath $extractDir -Directory | Select-Object -First 1
+  if (-not $archiveRoot) {
+    Fail 'downloaded source archive did not contain a repo root'
+  }
+
+  New-Item -ItemType Directory -Force -Path $DestinationDir | Out-Null
+  Get-ChildItem -LiteralPath $archiveRoot.FullName -Force | ForEach-Object {
+    $targetPath = Join-Path $DestinationDir $_.Name
+    Copy-Item -LiteralPath $_.FullName -Destination $targetPath -Recurse -Force
+  }
+
+  return $true
 }
 
 function Resolve-PackagedOverlaySource {
@@ -326,11 +483,11 @@ function Install-OverlayCompanion {
 
 function Ensure-WritablePrefix {
   if (-not [string]::IsNullOrWhiteSpace($SuperplanInstallPrefix)) {
-    $script:env:npm_config_prefix = $SuperplanInstallPrefix
+    $env:npm_config_prefix = $SuperplanInstallPrefix
     return
   }
 
-  $currentPrefix = (& npm prefix --global).Trim()
+  $currentPrefix = (& $script:NpmCommand prefix --global).Trim()
   if ([string]::IsNullOrWhiteSpace($currentPrefix)) {
     return
   }
@@ -343,8 +500,62 @@ function Ensure-WritablePrefix {
   Say "Default npm global prefix ($currentPrefix) is not writable."
   Say "Falling back to $fallbackPrefix."
   New-Item -ItemType Directory -Force -Path $fallbackPrefix | Out-Null
-  $script:env:npm_config_prefix = $fallbackPrefix
+  $env:npm_config_prefix = $fallbackPrefix
   $script:SuperplanInstallPrefix = $fallbackPrefix
+}
+
+function Write-SuperplanWindowsShims {
+  param(
+    [string] $InstallBinDir
+  )
+
+  if (-not $script:UsingBundledNodeRuntime) {
+    return
+  }
+
+  $bundledNodeHome = Resolve-BundledNodeRuntimeHome
+  if ([string]::IsNullOrWhiteSpace($bundledNodeHome)) {
+    Fail 'bundled Superplan Node runtime was expected but not found'
+  }
+
+  $bundledNodeExe = Join-Path $bundledNodeHome 'node.exe'
+  $cmdShimPath = Join-Path $InstallBinDir 'superplan.cmd'
+  $ps1ShimPath = Join-Path $InstallBinDir 'superplan.ps1'
+  $escapedNodeExe = $bundledNodeExe -replace "'", "''"
+
+  $cmdShimContent = @"
+@echo off
+setlocal
+set "SUPERPLAN_NODE_EXE=$bundledNodeExe"
+set "SUPERPLAN_ENTRY=%~dp0node_modules\superplan\dist\cli\main.js"
+if not exist "%SUPERPLAN_NODE_EXE%" (
+  echo error: missing bundled Superplan Node runtime at %SUPERPLAN_NODE_EXE% 1>&2
+  exit /b 1
+)
+if not exist "%SUPERPLAN_ENTRY%" (
+  echo error: missing Superplan CLI entrypoint at %SUPERPLAN_ENTRY% 1>&2
+  exit /b 1
+)
+"%SUPERPLAN_NODE_EXE%" "%SUPERPLAN_ENTRY%" %*
+exit /b %ERRORLEVEL%
+"@
+
+  $ps1ShimContent = @"
+`$ErrorActionPreference = 'Stop'
+`$nodeExe = '$escapedNodeExe'
+`$entryPath = Join-Path `$PSScriptRoot 'node_modules\superplan\dist\cli\main.js'
+if (-not (Test-Path -LiteralPath `$nodeExe -PathType Leaf)) {
+  throw "error: missing bundled Superplan Node runtime at `$nodeExe"
+}
+if (-not (Test-Path -LiteralPath `$entryPath -PathType Leaf)) {
+  throw "error: missing Superplan CLI entrypoint at `$entryPath"
+}
+& `$nodeExe `$entryPath @args
+exit `$LASTEXITCODE
+"@
+
+  Set-Content -Path $cmdShimPath -Value $cmdShimContent -Encoding ascii
+  Set-Content -Path $ps1ShimPath -Value $ps1ShimContent -Encoding ascii
 }
 
 function Should-EnableOverlayByDefault {
@@ -413,19 +624,13 @@ function Run-MachineSetup {
   }
 }
 
-Require-Command node
-Require-Command npm
-
-if ([string]::IsNullOrWhiteSpace($SuperplanSourceDir)) {
-  Require-Command git
-}
-
 $workDir = Join-Path ([System.IO.Path]::GetTempPath()) ("superplan-install-" + [Guid]::NewGuid().ToString('N'))
 $sourceWorktree = Join-Path $workDir 'source'
 
 New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 
 try {
+  Ensure-NodeToolchain
   Ensure-WritablePrefix
   Resolve-InstallRef
   Resolve-OverlayRef
@@ -439,25 +644,35 @@ try {
     Say "Copying Superplan source from $SuperplanSourceDir"
     Copy-LocalSourceSnapshot -SourceDir $SuperplanSourceDir -DestinationDir $sourceWorktree
   } else {
-    Say "Cloning Superplan from $SuperplanRepoUrl"
-    & git clone $SuperplanRepoUrl $sourceWorktree | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-      Fail "failed to clone repository: $SuperplanRepoUrl"
+    $targetRef = if (-not [string]::IsNullOrWhiteSpace($SuperplanLatestCommitish)) { $SuperplanLatestCommitish } else { $SuperplanResolvedRef }
+    $downloadedArchive = $false
+    try {
+      $downloadedArchive = Download-GitHubSourceSnapshot -RepoUrl $SuperplanRepoUrl -Ref $targetRef -DestinationDir $sourceWorktree -WorkDir $workDir
+    } catch {
+      if (Get-Command git -ErrorAction SilentlyContinue) {
+        Say "GitHub archive download failed; falling back to git checkout for $targetRef"
+      } else {
+        throw
+      }
     }
 
-    Push-Location $sourceWorktree
-    try {
-      if (-not [string]::IsNullOrWhiteSpace($SuperplanLatestCommitish)) {
-        & git checkout $SuperplanLatestCommitish | Out-Null
-      } else {
-        & git checkout $SuperplanResolvedRef | Out-Null
-      }
+    if (-not $downloadedArchive) {
+      Require-Command git
+      Say "Cloning Superplan from $SuperplanRepoUrl"
+      & git clone $SuperplanRepoUrl $sourceWorktree | Out-Null
       if ($LASTEXITCODE -ne 0) {
-        $targetRef = if (-not [string]::IsNullOrWhiteSpace($SuperplanLatestCommitish)) { $SuperplanLatestCommitish } else { $SuperplanResolvedRef }
-        Fail "failed to check out ref: $targetRef"
+        Fail "failed to clone repository: $SuperplanRepoUrl"
       }
-    } finally {
-      Pop-Location
+
+      Push-Location $sourceWorktree
+      try {
+        & git checkout $targetRef | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+          Fail "failed to check out ref: $targetRef"
+        }
+      } finally {
+        Pop-Location
+      }
     }
   }
 
@@ -476,13 +691,13 @@ try {
   try {
     if (-not (Test-Path -LiteralPath (Join-Path $sourceWorktree 'node_modules') -PathType Container)) {
       Say 'Installing dependencies'
-      Invoke-QuietCommand -Label 'npm-install' -Command { npm install }
+      Invoke-QuietCommand -Label 'npm-install' -Command { & $script:NpmCommand install }
     } else {
       Say 'Using existing node_modules from source snapshot'
     }
 
     Say 'Building Superplan'
-    Invoke-QuietCommand -Label 'npm-build' -Command { npm run build }
+    Invoke-QuietCommand -Label 'npm-build' -Command { & $script:NpmCommand run build }
 
     if (-not [string]::IsNullOrWhiteSpace($SuperplanSourceDir)) {
       Say 'Packing Superplan from local source snapshot'
@@ -492,7 +707,7 @@ try {
 
     $packLogPath = Join-Path $workDir 'npm-pack.log'
     try {
-      $packageTgz = (& npm pack --silent 2>$packLogPath).Trim().Split([Environment]::NewLine, [System.StringSplitOptions]::RemoveEmptyEntries)[-1]
+      $packageTgz = (& $script:NpmCommand pack --silent 2>$packLogPath).Trim().Split([Environment]::NewLine, [System.StringSplitOptions]::RemoveEmptyEntries)[-1]
       if ($LASTEXITCODE -ne 0) {
         if (Test-Path -LiteralPath $packLogPath) {
           Get-Content -Path $packLogPath
@@ -507,12 +722,12 @@ try {
     }
 
     Say 'Installing Superplan globally with npm'
-    Invoke-QuietCommand -Label 'npm-global-install' -Command { npm install --global (Join-Path $sourceWorktree $packageTgz) }
+    Invoke-QuietCommand -Label 'npm-global-install' -Command { & $script:NpmCommand install --global (Join-Path $sourceWorktree $packageTgz) }
   } finally {
     Pop-Location
   }
 
-  $installPrefix = (& npm prefix --global).Trim()
+  $installPrefix = (& $script:NpmCommand prefix --global).Trim()
   $installBinDir = $installPrefix
   $superplanCommandPath = Join-Path $installBinDir 'superplan.cmd'
 
@@ -522,6 +737,12 @@ try {
 
   if (-not (Test-Path -LiteralPath $superplanCommandPath -PathType Leaf)) {
     Fail "superplan binary was not installed to $installBinDir"
+  }
+
+  if ($script:UsingBundledNodeRuntime) {
+    Say 'Rewriting Windows Superplan launchers to use the bundled Node runtime'
+    Write-SuperplanWindowsShims -InstallBinDir $installBinDir
+    $superplanCommandPath = Join-Path $installBinDir 'superplan.cmd'
   }
 
   if (-not [string]::IsNullOrWhiteSpace($SuperplanOverlaySourcePath)) {
