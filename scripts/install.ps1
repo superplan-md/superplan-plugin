@@ -231,7 +231,7 @@ function Ensure-NodeToolchain {
     Fail 'bootstrapped portable Node.js runtime did not contain npm.cmd'
   }
 
-  $script:env:PATH = "$($nodeHome.FullName);$($script:env:PATH)"
+  $env:PATH = "$($nodeHome.FullName);$($env:PATH)"
 }
 
 function Resolve-LatestReleaseTagFromGitHub {
@@ -437,7 +437,7 @@ function Install-OverlayCompanion {
 
 function Ensure-WritablePrefix {
   if (-not [string]::IsNullOrWhiteSpace($SuperplanInstallPrefix)) {
-    $script:env:npm_config_prefix = $SuperplanInstallPrefix
+    $env:npm_config_prefix = $SuperplanInstallPrefix
     return
   }
 
@@ -454,7 +454,7 @@ function Ensure-WritablePrefix {
   Say "Default npm global prefix ($currentPrefix) is not writable."
   Say "Falling back to $fallbackPrefix."
   New-Item -ItemType Directory -Force -Path $fallbackPrefix | Out-Null
-  $script:env:npm_config_prefix = $fallbackPrefix
+  $env:npm_config_prefix = $fallbackPrefix
   $script:SuperplanInstallPrefix = $fallbackPrefix
 }
 

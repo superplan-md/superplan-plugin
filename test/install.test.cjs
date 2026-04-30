@@ -285,6 +285,9 @@ test('windows powershell installer bootstraps node and downloads github source a
   assert.match(installerSource, /& \$script:NpmCommand install/);
   assert.match(installerSource, /& \$script:NpmCommand run build/);
   assert.match(installerSource, /& \$script:NpmCommand install --global/);
+  assert.match(installerSource, /\$env:PATH = "\$\(\$nodeHome\.FullName\);\$\(\$env:PATH\)"/);
+  assert.match(installerSource, /\$env:npm_config_prefix = \$SuperplanInstallPrefix/);
+  assert.match(installerSource, /\$env:npm_config_prefix = \$fallbackPrefix/);
 });
 
 test('windows powershell installer ignores native stderr notices and relies on exit codes in quiet command execution', async () => {
