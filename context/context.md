@@ -42,17 +42,21 @@ The current documented top-level command surface is:
 
 Supported install paths in the current repo are:
 
-- curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 sh`
-- curl installer with custom prefix: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/0.1.0/scripts/install.sh | SUPERPLAN_REF=0.1.0 SUPERPLAN_INSTALL_PREFIX="$HOME/.local" sh`
+- macOS/Linux curl installer: `curl -fsSL https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.sh | sh`
+- Windows PowerShell: `curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }`
+- Windows Command Prompt: `curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd`
+- Windows Git Bash / MINGW64: `curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && cmd.exe //c install-superplan.cmd`
 - npm from a local checkout after build (release mode): `npm install -g .`
 - npm link for active local development: `npm link` from the project root after `npm run build`.
 
 Important install note:
 
-- Public quick-start docs pin the installer to `0.1.0` by using both the tagged raw URL and `SUPERPLAN_REF=0.1.0`, because `scripts/install.sh` otherwise resolves to the current default install ref when that env var is absent.
-- `scripts/install.sh` records install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later and then refresh existing skill installs.
+- Public quick-start docs use the raw installer entrypoints from `main`: `scripts/install.sh` for macOS/Linux and `scripts/install.cmd` for Windows, with the Windows batch entrypoint delegating to `scripts/install.ps1`.
+- `install-superplan.cmd` is a Windows batch file; Git Bash users must hand it to `cmd.exe` instead of asking Bash to execute it directly, or they will hit `bash: install-superplan.cmd: command not found`.
+- The install scripts record install metadata under `~/.config/superplan/install.json` so `superplan update` can reuse the install source later and then refresh existing skill installs.
 - Older installed binaries that predate the `update` command still need one manual rebuild/reinstall before `superplan update` becomes available.
 - The documented npm flow assumes a local checkout where dependencies are installed and `npm run build` has been run before `npm install -g .`.
+- If the installer adds a new bin directory to `PATH`, users need to open a new shell before `superplan` is available there.
 
 ## Project Structure
 

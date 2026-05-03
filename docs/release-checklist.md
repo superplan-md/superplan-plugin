@@ -56,6 +56,18 @@ On Windows PowerShell:
 curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd; if ($LASTEXITCODE -eq 0) { .\install-superplan.cmd }
 ```
 
+On Windows Command Prompt:
+
+```cmd
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
+```
+
+On Windows Git Bash / MINGW64:
+
+```bash
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && cmd.exe //c install-superplan.cmd
+```
+
 ## Expected Unsigned Warnings
 
 This release flow does not include Apple notarization or Windows code signing yet.
