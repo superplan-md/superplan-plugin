@@ -3,6 +3,7 @@ import './index.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { LandingPage } from './components/landing-page'
 import { OverlayWindow } from './components/overlay-window'
 import { initTheme } from './lib/apply-theme'
 
@@ -16,6 +17,6 @@ const route = window.location.hash.replace(/^#/, '') || 'board'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {route === 'overlay' ? <OverlayWindow /> : <App />}
+    {route === 'overlay' ? <OverlayWindow /> : route === 'landing' ? <LandingPage /> : <App />}
   </StrictMode>
 )
