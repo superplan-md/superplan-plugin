@@ -41,9 +41,18 @@ curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superp
 curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && install-superplan.cmd
 ```
 
+### Windows (Git Bash / MINGW64)
+
+```bash
+curl.exe -fsSL -o install-superplan.cmd https://raw.githubusercontent.com/superplan-md/superplan-plugin/main/scripts/install.cmd && cmd.exe //c install-superplan.cmd
+```
+
+`install-superplan.cmd` is a Windows batch file. If you download it from Git Bash, run it through `cmd.exe` or switch to PowerShell; do not ask Bash to execute it directly.
+
 The Windows installer now installs the CLI and the packaged overlay companion, and it downloads and keeps a bundled Node runtime when needed so users do not need to preinstall Node.js just to get started.
 
 After install, Superplan will ask if you want to run `superplan init`.
+If `superplan` is not found in the current shell after install, open a new terminal and run `superplan --version`.
 
 ---
 
