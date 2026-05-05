@@ -287,6 +287,7 @@ test('windows powershell installer bootstraps node and downloads github source a
   const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.ps1'), 'utf-8');
 
   assert.match(installerSource, /Ensure-NodeToolchain/);
+  assert.match(installerSource, /function Is-MovingRef/);
   assert.match(installerSource, /Resolve-BundledNodeRuntimeHome/);
   assert.match(installerSource, /\.config\\superplan\\node-runtime/);
   assert.match(installerSource, /Use-BundledNodeRuntime/);
@@ -320,6 +321,7 @@ test('windows powershell installer ignores native stderr notices and relies on e
 test('windows cmd installer delegates to powershell', async () => {
   const installerSource = await fs.readFile(path.join(REPO_ROOT, 'scripts', 'install.cmd'), 'utf-8');
 
+  assert.match(installerSource, /if not defined SUPERPLAN_REF set "SUPERPLAN_REF=main"/);
   assert.match(installerSource, /install\.ps1/);
   assert.match(installerSource, /powershell -NoProfile -ExecutionPolicy Bypass/);
   assert.match(installerSource, /raw\.githubusercontent\.com\/superplan-md\/superplan-plugin\/main\/scripts\/install\.ps1/);

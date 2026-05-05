@@ -184,6 +184,13 @@ function Resolve-WindowsArch {
   }
 }
 
+function Is-MovingRef {
+  param([string] $Ref)
+
+  $normalizedRef = ([string] $Ref).Trim().ToLowerInvariant()
+  return $normalizedRef -eq 'main' -or $normalizedRef -eq 'dev'
+}
+
 function Resolve-BundledNodeRuntimeHome {
   if (-not (Test-Path -LiteralPath $BundledNodeRuntimeRoot -PathType Container)) {
     return $null
@@ -325,7 +332,11 @@ function Resolve-InstallRef {
 }
 
 function Resolve-OverlayRef {
-  if (-not [string]::IsNullOrWhiteSpace($SuperplanRef)) {
+  if (
+    -not [string]::IsNullOrWhiteSpace($SuperplanRef) `
+    -and `
+    (-not (Is-MovingRef $SuperplanRef) -or -not [string]::IsNullOrWhiteSpace($SuperplanOverlayReleaseBaseUrl))
+  ) {
     $script:SuperplanOverlayRef = $SuperplanRef
     return
   }
@@ -334,6 +345,12 @@ function Resolve-OverlayRef {
   if (-not [string]::IsNullOrWhiteSpace($latestReleaseTag)) {
     $script:SuperplanOverlayRef = $latestReleaseTag
     Say "Resolved latest Superplan overlay release: $script:SuperplanOverlayRef"
+    return
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($SuperplanRef)) {
+    $script:SuperplanOverlayRef = $SuperplanRef
+    Say "No release tag found; defaulting overlay ref to $script:SuperplanOverlayRef"
     return
   }
 
