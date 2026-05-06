@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const {
   loadDistModule,
@@ -14,6 +15,28 @@ const {
   writeJson,
   getSuperplanRoot,
 } = require('./helpers.cjs');
+
+function runGit(cwd, args, env) {
+  const result = spawnSync('git', ['-C', cwd, ...args], {
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      ...env,
+    },
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  return result.stdout.trim();
+}
+
+async function initGitRepo(sandbox) {
+  runGit(sandbox.cwd, ['init'], sandbox.env);
+  runGit(sandbox.cwd, ['config', 'user.name', 'Superplan Test'], sandbox.env);
+  runGit(sandbox.cwd, ['config', 'user.email', 'superplan@example.com'], sandbox.env);
+  await fs.writeFile(path.join(sandbox.cwd, 'README.md'), '# Test\n', 'utf-8');
+  runGit(sandbox.cwd, ['add', 'README.md'], sandbox.env);
+  runGit(sandbox.cwd, ['commit', '-m', 'init'], sandbox.env);
+}
 
 test('macOS bundle launch plan reuses an already running matching workspace instance', () => {
   const { getMacosOverlayBundleLaunchPlan } = loadDistModule('cli/overlay-companion.js');
@@ -166,6 +189,17 @@ function getOverlayRuntimePathsForSandbox(sandbox) {
   };
 }
 
+function getOverlayRuntimePathsForWorkspace(sandbox, workspacePath) {
+  const { getWorkspaceOverlayKey } = loadDistModule('shared/overlay.js');
+  const workspaceKey = getWorkspaceOverlayKey(workspacePath);
+  const runtimeDir = path.join(sandbox.home, '.config', 'superplan', workspaceKey, 'runtime');
+  return {
+    runtime_dir: runtimeDir,
+    snapshot_path: path.join(runtimeDir, 'overlay.json'),
+    control_path: path.join(runtimeDir, 'overlay-control.json'),
+  };
+}
+
 function getGlobalRuntimePathsForSandbox(sandbox) {
   const runtimeDir = path.join(getSuperplanRoot(sandbox), 'runtime');
   return {
@@ -241,6 +275,58 @@ async function enableOverlayForSandbox(sandbox) {
     env: sandbox.env,
   }));
 }
+
+test('linked worktree overlay refresh mirrors project state back to the primary workspace and keeps the worktree task active', async () => {
+  const sandbox = await makeSandbox('superplan-overlay-worktree-sync-');
+  const sessionEnv = {
+    ...sandbox.env,
+    SUPERPLAN_SESSION_ID: 'session-A',
+  };
+
+  await initGitRepo(sandbox);
+  await fs.mkdir(path.join(getSuperplanRoot(sandbox), 'changes'), { recursive: true });
+
+  parseCliJson(await runCli([
+    'change', 'new', 'alpha', '--title', 'Alpha', '--single-task', 'Alpha task', '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+  parseCliJson(await runCli(['run', 'alpha/T-001', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+
+  parseCliJson(await runCli([
+    'change', 'new', 'beta', '--title', 'Beta', '--single-task', 'Beta task', '--json',
+  ], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+  const ensurePayload = parseCliJson(await runCli(['worktree', 'ensure', 'beta', '--json'], {
+    cwd: sandbox.cwd,
+    env: sessionEnv,
+  }));
+  const betaWorktreePath = ensurePayload.data.execution_root;
+
+  parseCliJson(await runCli(['run', 'beta/T-001', '--json'], {
+    cwd: betaWorktreePath,
+    env: sessionEnv,
+  }));
+
+  const primarySnapshot = await readJson(getOverlayRuntimePathsForWorkspace(sandbox, sandbox.cwd).snapshot_path);
+  const betaSnapshot = await readJson(getOverlayRuntimePathsForWorkspace(sandbox, betaWorktreePath).snapshot_path);
+
+  assert.deepEqual(
+    primarySnapshot.board.in_progress.map(task => task.task_ref).sort(),
+    ['alpha/T-001', 'beta/T-001'],
+  );
+  assert.equal(betaSnapshot.active_task.task_ref, 'beta/T-001');
+  assert.deepEqual(
+    betaSnapshot.board.in_progress.map(task => task.task_ref).sort(),
+    ['alpha/T-001', 'beta/T-001'],
+  );
+});
 
 test('overlay --help explains overlay lifecycle subcommands', async () => {
   const result = await runCli(['overlay', '--help']);

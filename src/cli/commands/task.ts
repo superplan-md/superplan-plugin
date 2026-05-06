@@ -112,6 +112,8 @@ interface RuntimePaths {
   eventsPath: string;
 }
 
+type PersistedTaskContractStatus = 'pending' | 'in_progress' | 'done';
+
 interface TaskFixAction {
   task_id: string;
   action: 'reset' | 'block' | 'migrate';
@@ -306,6 +308,26 @@ async function readRuntimeState(runtimeFilePath: string): Promise<RuntimeState> 
 async function writeRuntimeState(runtimeFilePath: string, runtimeState: RuntimeState): Promise<void> {
   await fs.mkdir(path.dirname(runtimeFilePath), { recursive: true });
   await writeJsonAtomic(runtimeFilePath, runtimeState);
+}
+
+async function syncTaskContractStatus(task: Pick<ParsedTask, 'task_file_path'>, status: PersistedTaskContractStatus): Promise<void> {
+  if (!task.task_file_path) {
+    return;
+  }
+
+  let currentContent: string;
+  try {
+    currentContent = await fs.readFile(task.task_file_path, 'utf-8');
+  } catch {
+    return;
+  }
+
+  const nextContent = currentContent.replace(/^status:\s*.+$/m, `status: ${status}`);
+  if (nextContent === currentContent) {
+    return;
+  }
+
+  await fs.writeFile(task.task_file_path, nextContent, 'utf-8');
 }
 
 function createEmptyRuntimeState(): RuntimeState {
@@ -1927,6 +1949,7 @@ async function startTask(taskId: string, command = 'task start'): Promise<TaskCo
   }
 
   if (existingTaskState?.status === 'in_progress') {
+    await syncTaskContractStatus(matchedTask, 'in_progress');
     return {
       ok: true,
       data: {
@@ -1987,6 +2010,7 @@ async function startTask(taskId: string, command = 'task start'): Promise<TaskCo
   if (persistResult) {
     return persistResult;
   }
+  await syncTaskContractStatus(matchedTask, 'in_progress');
   await appendEvent(runtimePaths.eventsPath, 'task.started', taskRef, { command });
   if (matchedTask.change_id) {
     await syncChangeMetrics(matchedTask.change_id);
@@ -2047,6 +2071,7 @@ async function resumeTask(taskId: string, command = 'task resume'): Promise<Task
   }
 
   if (existingTaskState?.status === 'in_progress') {
+    await syncTaskContractStatus(matchedTask, 'in_progress');
     return {
       ok: true,
       data: {
@@ -2112,6 +2137,7 @@ async function resumeTask(taskId: string, command = 'task resume'): Promise<Task
   if (persistResult) {
     return persistResult;
   }
+  await syncTaskContractStatus(matchedTask, 'in_progress');
   await appendEvent(runtimePaths.eventsPath, 'task.resumed', taskRef, { command });
   if (matchedTask.change_id) {
     await syncChangeMetrics(matchedTask.change_id);
@@ -2323,6 +2349,7 @@ async function completeTask(taskId: string, command = 'task review complete'): P
   });
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  await syncTaskContractStatus(matchedTask, 'done');
   await appendEvent(runtimePaths.eventsPath, 'task.approved', taskRef, { command, workflowPhase: 'review' });
   const overlay = await ensureOverlayFromMergedTasks({ command });
 
@@ -2415,6 +2442,7 @@ async function completeTasks(taskIds: string[], command = 'task review complete'
       updated_at: timestamp,
     };
     setRuntimeTaskState(runtimeState, taskRef, nextTaskState);
+    await syncTaskContractStatus(task, 'done');
 
     await appendEvent(runtimePaths.eventsPath, 'task.approved', taskRef, { command, workflowPhase: 'review' });
     completedTasks.push(buildRuntimeTaskSnapshot(task, getRuntimeTaskState(runtimeState, taskRef)!));
@@ -2483,6 +2511,7 @@ async function approveTask(taskId: string, command = 'task review approve'): Pro
   });
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  await syncTaskContractStatus(matchedTask, 'done');
   await appendEvent(runtimePaths.eventsPath, 'task.approved', taskRef, { command, workflowPhase: 'review' });
   const overlay = await ensureOverlayFromMergedTasks({ command });
 
@@ -2694,6 +2723,7 @@ async function reopenTask(taskId: string, reason?: string, command = 'task revie
   if (persistResult) {
     return persistResult;
   }
+  await syncTaskContractStatus(mergedTask, 'in_progress');
   await appendEvent(runtimePaths.eventsPath, 'task.reopened', taskRef, {
     command,
     workflowPhase: 'review',
@@ -2753,6 +2783,9 @@ async function resetTask(taskId: string, command = 'task repair reset'): Promise
   deleteRuntimeTaskState(runtimeState, resolvedTaskRef);
 
   await writeRuntimeState(runtimePaths.tasksPath, runtimeState);
+  if (matchedTask) {
+    await syncTaskContractStatus(matchedTask, 'pending');
+  }
   await appendEvent(runtimePaths.eventsPath, 'task.reset', resolvedTaskRef, { command, workflowPhase: 'runtime' });
   const overlay = await ensureOverlayFromMergedTasks({ command });
 
