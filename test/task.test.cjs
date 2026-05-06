@@ -190,6 +190,60 @@ Run me
   assert.equal(explicitContinuePayload.data.active_task_context.environment.SUPERPLAN_ACTIVE_TASK, 'demo/T-100');
 });
 
+test('task lifecycle keeps the contract frontmatter status aligned with visible execution state', async () => {
+  const sandbox = await makeSandbox('superplan-task-contract-status-');
+  const taskPath = path.join(getSuperplanRoot(sandbox), 'changes', 'demo', 'tasks', 'T-110.md');
+
+  await writeChangeGraph(sandbox.cwd, 'demo', {
+    title: 'Demo',
+    entries: [
+      { task_id: 'T-110', title: 'Keep task status honest' },
+    ],
+  });
+
+  await writeFile(taskPath, `---
+task_id: T-110
+status: pending
+priority: high
+---
+
+## Description
+Keep task status honest
+
+## Acceptance Criteria
+- [ ] A
+`);
+
+  const runPayload = parseCliJson(await runCli(['run', 'demo/T-110', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+  assert.equal(runPayload.ok, true);
+  assert.equal(runPayload.data.status, 'in_progress');
+  assert.match(await fs.readFile(taskPath, 'utf-8'), /^status:\s*in_progress$/m);
+
+  await writeFile(taskPath, `---
+task_id: T-110
+status: in_progress
+priority: high
+---
+
+## Description
+Keep task status honest
+
+## Acceptance Criteria
+- [x] A
+`);
+
+  const completePayload = parseCliJson(await runCli(['task', 'review', 'complete', 'demo/T-110', '--json'], {
+    cwd: sandbox.cwd,
+    env: sandbox.env,
+  }));
+  assert.equal(completePayload.ok, true);
+  assert.equal(completePayload.data.status, 'done');
+  assert.match(await fs.readFile(taskPath, 'utf-8'), /^status:\s*done$/m);
+});
+
 test('bare run does not auto-resume or replace competing in-progress work from another change', async () => {
   const sandbox = await makeSandbox('superplan-run-competing-active-');
 
